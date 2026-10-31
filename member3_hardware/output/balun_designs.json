@@ -1,0 +1,158 @@
+{
+  "impedance_analysis": {
+    "yagi": {
+      "z_in_real": 25.0,
+      "z_in_imag": -5.0,
+      "z0": 50.0,
+      "gamma_magnitude": 0.3391817326856071,
+      "gamma_phase_deg": -164.87599269168942,
+      "vswr": 2.0265507158694716,
+      "return_loss_dB": 9.391350911765828,
+      "mismatch_loss_dB": 0.530784434834197,
+      "power_delivered_pct": 88.49557522123894
+    },
+    "dipole": {
+      "z_in_real": 73.0,
+      "z_in_imag": 42.5,
+      "z0": 50.0,
+      "gamma_magnitude": 0.3713392742703618,
+      "gamma_phase_deg": 42.51730311714872,
+      "vswr": 2.1813662252859105,
+      "return_loss_dB": 8.604582313786473,
+      "mismatch_loss_dB": 0.6443875634584793,
+      "power_delivered_pct": 86.2107143384361
+    }
+  },
+  "pawsey_stub": {
+    "RG174": {
+      "type": "Pawsey Stub (\u03bb/4 Shorted Stub)",
+      "coax_type": "RG174",
+      "coax_z0": 50.0,
+      "velocity_factor": 0.66,
+      "coax_outer_diameter_mm": 2.8,
+      "coax_loss_dB_per_m": 1.9,
+      "lambda_free_space_mm": 122.86576147540984,
+      "lambda_in_coax_mm": 81.0914025737705,
+      "stub_length_mm": 20.272850643442624,
+      "stub_length_cm": 2.0272850643442624,
+      "feedline_length_mm": 300,
+      "total_coax_needed_mm": 320.2728506434426,
+      "total_coax_needed_cm": 32.02728506434426,
+      "description": "Thin, flexible. Good for short runs.",
+      "construction_notes": [
+        "1. Cut a piece of RG174 coax to 20.3 mm (2.03 cm)",
+        "2. At one end, strip the jacket and expose center conductor + shield",
+        "3. SHORT the center conductor to the shield (solder or crimp)",
+        "4. At the other end, connect in PARALLEL to the feedpoint coax",
+        "5. Tape/cable-tie the stub back along the main feedline",
+        "6. The stub blocks common-mode currents on the coax outer shield"
+      ]
+    },
+    "RG316": {
+      "type": "Pawsey Stub (\u03bb/4 Shorted Stub)",
+      "coax_type": "RG316",
+      "coax_z0": 50.0,
+      "velocity_factor": 0.695,
+      "coax_outer_diameter_mm": 2.5,
+      "coax_loss_dB_per_m": 1.6,
+      "lambda_free_space_mm": 122.86576147540984,
+      "lambda_in_coax_mm": 85.39170422540982,
+      "stub_length_mm": 21.347926056352456,
+      "stub_length_cm": 2.1347926056352455,
+      "feedline_length_mm": 300,
+      "total_coax_needed_mm": 321.34792605635243,
+      "total_coax_needed_cm": 32.13479260563524,
+      "description": "PTFE dielectric, lower loss. Slightly stiffer.",
+      "construction_notes": [
+        "1. Cut a piece of RG316 coax to 21.3 mm (2.13 cm)",
+        "2. At one end, strip the jacket and expose center conductor + shield",
+        "3. SHORT the center conductor to the shield (solder or crimp)",
+        "4. At the other end, connect in PARALLEL to the feedpoint coax",
+        "5. Tape/cable-tie the stub back along the main feedline",
+        "6. The stub blocks common-mode currents on the coax outer shield"
+      ]
+    },
+    "RG58": {
+      "type": "Pawsey Stub (\u03bb/4 Shorted Stub)",
+      "coax_type": "RG58",
+      "coax_z0": 50.0,
+      "velocity_factor": 0.66,
+      "coax_outer_diameter_mm": 5.0,
+      "coax_loss_dB_per_m": 0.9,
+      "lambda_free_space_mm": 122.86576147540984,
+      "lambda_in_coax_mm": 81.0914025737705,
+      "stub_length_mm": 20.272850643442624,
+      "stub_length_cm": 2.0272850643442624,
+      "feedline_length_mm": 300,
+      "total_coax_needed_mm": 320.2728506434426,
+      "total_coax_needed_cm": 32.02728506434426,
+      "description": "Thicker, lower loss. Harder to bend for balun.",
+      "construction_notes": [
+        "1. Cut a piece of RG58 coax to 20.3 mm (2.03 cm)",
+        "2. At one end, strip the jacket and expose center conductor + shield",
+        "3. SHORT the center conductor to the shield (solder or crimp)",
+        "4. At the other end, connect in PARALLEL to the feedpoint coax",
+        "5. Tape/cable-tie the stub back along the main feedline",
+        "6. The stub blocks common-mode currents on the coax outer shield"
+      ]
+    },
+    "RG402": {
+      "type": "Pawsey Stub (\u03bb/4 Shorted Stub)",
+      "coax_type": "RG402",
+      "coax_z0": 50.0,
+      "velocity_factor": 0.695,
+      "coax_outer_diameter_mm": 3.6,
+      "coax_loss_dB_per_m": 1.1,
+      "lambda_free_space_mm": 122.86576147540984,
+      "lambda_in_coax_mm": 85.39170422540982,
+      "stub_length_mm": 21.347926056352456,
+      "stub_length_cm": 2.1347926056352455,
+      "feedline_length_mm": 300,
+      "total_coax_needed_mm": 321.34792605635243,
+      "total_coax_needed_cm": 32.13479260563524,
+      "description": "Semi-rigid. Best performance but harder to work with.",
+      "construction_notes": [
+        "1. Cut a piece of RG402 coax to 21.3 mm (2.13 cm)",
+        "2. At one end, strip the jacket and expose center conductor + shield",
+        "3. SHORT the center conductor to the shield (solder or crimp)",
+        "4. At the other end, connect in PARALLEL to the feedpoint coax",
+        "5. Tape/cable-tie the stub back along the main feedline",
+        "6. The stub blocks common-mode currents on the coax outer shield"
+      ]
+    }
+  },
+  "bazooka_balun": {
+    "type": "Bazooka (Sleeve) Balun",
+    "coax_type": "RG174",
+    "sleeve_length_mm": 20.272850643442624,
+    "sleeve_length_cm": 2.0272850643442624,
+    "min_sleeve_inner_diameter_mm": 3.8,
+    "sleeve_material": "Copper/brass tube or aluminum foil tube",
+    "construction_notes": [
+      "1. Obtain a conductive tube (ID > 3.8 mm)",
+      "2. Cut the tube to 20.3 mm (2.03 cm)",
+      "3. Slide the tube over the coax, starting from the feedpoint",
+      "4. Connect one end of the tube to the coax shield at the feedpoint",
+      "5. Leave the other end of the tube open (NOT connected)",
+      "6. The sleeve creates a high-impedance choke for shield currents"
+    ]
+  },
+  "passive_mount": {
+    "type": "Passive Wave-Launcher Cradle (Zero-Cost)",
+    "requires_soldering": false,
+    "requires_coax": false,
+    "requires_sma": false,
+    "estimated_cost": 0,
+    "coupling_gap_mm": 3.0,
+    "expected_gain_loss_dB": "3-5 dB less than direct coax feed",
+    "construction_notes": [
+      "1. Mount the driven dipole with a 3 mm center gap as normal",
+      "2. Create a small cradle/holder at the feedpoint to hold the phone/ESP32",
+      "3. Position the device's internal antenna aligned with the dipole gap",
+      "4. The parasitic elements (reflector + directors) still function normally",
+      "5. The device couples to the dipole via near-field electromagnetic induction",
+      "6. This method trades ~3-5 dB of gain for zero-cost simplicity"
+    ],
+    "best_for": "Quick testing, zero budget, no soldering tools available"
+  }
+}

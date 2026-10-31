@@ -1,0 +1,28 @@
+{
+  "_source": "Member 2 4nec2 optimized design (yagi_4el_244GHz.nec)",
+  "frequency_ghz": 2.44,
+  "wavelength_mm": 122.86576147540984,
+  "reflector_length_mm": 59.0,
+  "driven_dipole_length_mm": 55.6,
+  "director_1_length_mm": 52.2,
+  "director_2_length_mm": 50.4,
+  "driven_feed_gap_mm": 1.0,
+  "reflector_spacing_mm": 24.6,
+  "director_1_spacing_mm": 20.9,
+  "director_2_spacing_mm": 45.49999999999999,
+  "boom_positions_mm": {
+    "reflector": 0.0,
+    "driven_dipole": 24.6,
+    "director_1": 45.5,
+    "director_2": 70.1
+  },
+  "boom_active_span_mm": 70.1,
+  "wire_radius_mm": 0.814,
+  "wire_diameter_mm": 1.628,
+  "simulated_z_in_real": 48.74,
+  "simulated_z_in_imag": 2.2,
+  "simulated_s11_dB": -31.81,
+  "simulated_vswr": 1.053,
+  "simulated_peak_directivity_dBi": 8.5,
+  "simulated_front_to_back_dB": 21.0
+}

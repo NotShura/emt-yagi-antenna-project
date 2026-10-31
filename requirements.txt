@@ -1,0 +1,11 @@
+# Consolidated dependencies for the whole project.
+# Install once from the repo root:  pip install -r requirements.txt
+#
+# Per-member usage:
+#   numpy, scipy, matplotlib  -> Member 1 engine/GUI, Member 2 sim, Member 3 blueprints
+#   reportlab                 -> Member 2 PDF report builder (build_pdf_report.py)
+
+numpy>=1.26
+scipy>=1.12
+matplotlib>=3.8
+reportlab>=4.0

@@ -1,0 +1,45 @@
+CM ======================================================================
+CM 4-Element Yagi-Uda Antenna Array for 2.44 GHz ISM Band
+CM Element Material: 14 AWG Solid Copper Wire (radius = 0.814 mm)
+CM Optimization: S11 < -15 dB, VSWR < 1.5, High F/B Ratio & Directivity
+CM Center Frequency: 2.44 GHz (2440 MHz) | Sweep: 2.0 GHz - 3.0 GHz
+CM ======================================================================
+CE
+SY rwire = 0.000814          ' Wire radius: 14 AWG solid copper (0.814 mm)
+SY seg = 21                  ' Segments per wire (odd number for center feed)
+' --- Element Lengths (meters) ---
+SY L_ref  = 0.0590           ' Reflector: 59.0 mm (0.480 lambda)
+SY L_drv  = 0.0556           ' Driven Dipole: 55.6 mm (0.452 lambda)
+SY L_dir1 = 0.0522           ' Director 1: 52.2 mm (0.425 lambda)
+SY L_dir2 = 0.0504           ' Director 2: 50.4 mm (0.410 lambda)
+' --- Element Positions Along Boom (X-Axis, meters) ---
+SY x_ref  = 0.0000           ' Reflector at X = 0.0 mm (origin)
+SY d_rd   = 0.0246           ' Reflector-to-Driven spacing: 24.6 mm (0.200 lambda)
+SY d_d1   = 0.0209           ' Driven-to-Director 1 spacing: 20.9 mm (0.170 lambda)
+SY d_12   = 0.0246           ' Director 1-to-Director 2 spacing: 24.6 mm (0.200 lambda)
+SY x_drv  = x_ref + d_rd     ' Driven element X = 0.0246 m (24.6 mm)
+SY x_d1   = x_drv + d_d1     ' Director 1 X = 0.0455 m (45.5 mm)
+SY x_d2   = x_d1 + d_12      ' Director 2 X = 0.0701 m (70.1 mm)
+' --- Wire Geometry Cards (GW tag seg x1 y1 z1 x2 y2 z2 rad) ---
+' Tag 1: Reflector along Z-axis at X = x_ref
+GW 1 seg x_ref 0 -L_ref/2 x_ref 0 L_ref/2 rwire
+' Tag 2: Driven Dipole along Z-axis at X = x_drv
+GW 2 seg x_drv 0 -L_drv/2 x_drv 0 L_drv/2 rwire
+' Tag 3: Director 1 along Z-axis at X = x_d1
+GW 3 seg x_d1  0 -L_dir1/2 x_d1  0 L_dir1/2 rwire
+' Tag 4: Director 2 along Z-axis at X = x_d2
+GW 4 seg x_d2  0 -L_dir2/2 x_d2  0 L_dir2/2 rwire
+' --- Geometry End ---
+GE 0
+' --- Loading Card (LD): Copper conductivity 5.8001e7 S/m for all wires ---
+LD 5 0 0 0 5.8001e7
+' --- Excitation Card (EX): Center segment of driven dipole (Tag 2, Seg 11) ---
+EX 0 2 11 0 1.0 0.0
+' --- Ground Card (GN): Free space environment (-1) ---
+GN -1
+' --- Frequency Card (FR): 2.0 GHz to 3.0 GHz in 10 MHz steps (101 steps) ---
+FR 0 101 0 0 2000.0 10.0
+' --- Radiation Pattern Card (RP): Far-field 3D spherical pattern ---
+RP 0 73 73 1000 -90.0 0.0 2.5 5.0
+' --- End of Input Card ---
+EN
