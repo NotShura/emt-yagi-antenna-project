@@ -96,27 +96,40 @@ def get_taper_weights(N, taper='uniform', sll_db=30.0):
 
 
 def array_factor(theta, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
-    # array along z (collinear), theta from the array axis
+    # theta = angle from the array axis
     if d is None:
         d = LAMBDA / 2
-    psi = np.atleast_1d(K0 * d * np.cos(np.asarray(theta, dtype=float)) + beta)
+    psi = K0 * d * np.cos(np.asarray(theta, dtype=float)) + beta
     w = get_taper_weights(N, taper, sll_db)
-    AF = np.abs(np.sum(w[:, None] * np.exp(1j * np.outer(np.arange(N), psi)), axis=0))
-    AF = AF / np.sum(np.abs(w))
+    AF = np.abs(np.sum(w[:, None] * np.exp(1j * np.outer(np.arange(N), psi.ravel())), axis=0))
+    AF = AF.reshape(psi.shape) / np.sum(np.abs(w))
     if np.isscalar(theta):
-        return float(AF[0])
+        return float(AF)
     return AF
 
 
+def array_pattern_3d(theta, phi, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
+    # side-by-side array: z-directed dipoles spaced along x (same layout as the Yagi)
+    cos_gamma = np.sin(theta) * np.cos(phi)
+    return element_factor(theta) * array_factor(np.arccos(np.clip(cos_gamma, -1, 1)),
+                                                N, d, beta, taper, sll_db)
+
+
 def total_pattern(theta, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
-    return element_factor(theta) * array_factor(theta, N, d, beta, taper, sll_db)
+    # cut through the steering plane (theta = 90 deg), angle measured from the array axis.
+    # the dipole pattern is 1 in this plane
+    theta = np.asarray(theta, dtype=float)
+    return array_pattern_3d(np.full_like(theta, np.pi / 2), theta, N, d, beta, taper, sll_db)
 
 
 def compute_directivity(N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
-    f = lambda th: total_pattern(th, N, d, beta, taper, sll_db) ** 2 * np.sin(th)
-    P = 2 * np.pi * integrate.quad(f, 0, np.pi, limit=200)[0]
-    th = np.linspace(0, np.pi, 20000)
-    U_max = np.max(total_pattern(th, N, d, beta, taper, sll_db) ** 2)
+    th = np.linspace(0, np.pi, 181)
+    ph = np.linspace(0, 2 * np.pi, 361)
+    TH, PH = np.meshgrid(th, ph, indexing='ij')
+    U = array_pattern_3d(TH, PH, N, d, beta, taper, sll_db) ** 2
+    P = integrate.simpson(integrate.simpson(U * np.sin(TH), x=th, axis=0), x=ph)
+    # the peak is always in the theta = 90 plane
+    U_max = np.max(total_pattern(np.linspace(0, np.pi, 20000), N, d, beta, taper, sll_db) ** 2)
     if P <= 1e-15:
         return 0.0, 1.0
     D = 4 * np.pi * U_max / P
@@ -503,16 +516,19 @@ def plot_3d_spherical_pattern(N=4, d=None, beta=0.0, taper='uniform',
     th = np.linspace(0, np.pi, 181)
     ph = np.linspace(0, 2 * np.pi, 361)
     TH, PH = np.meshgrid(th, ph)
-    E = total_pattern(th, N, d, beta, taper)
-    R = np.tile(E / E.max(), (ph.size, 1))
+    R = array_pattern_3d(TH, PH, N, d, beta, taper)
+    R = R / R.max()
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(R * np.sin(TH) * np.cos(PH), R * np.sin(TH) * np.sin(PH), R * np.cos(TH),
                     facecolors=plt.cm.jet(R ** 2), linewidth=0, antialiased=True,
                     alpha=0.85, rstride=2, cstride=2)
-    ax.set_xlabel('X')
+    ax.set_xlabel('X (array axis)')
     ax.set_ylabel('Y')
-    ax.set_zlabel('Z (Array Axis)')
+    ax.set_zlabel('Z (dipole axis)')
+    ax.set_box_aspect((1, 1, 1))
+    for lim in (ax.set_xlim, ax.set_ylim, ax.set_zlim):
+        lim(-1, 1)
     ax.set_title("3D Spherical Radiation Pattern\nN={}, d={:.2f}*lambda, beta={:.0f} deg, Taper: {}  |  f0=2.44 GHz"
                  .format(N, d / LAMBDA, np.degrees(beta), taper), fontsize=11, pad=12)
     sm = plt.cm.ScalarMappable(cmap='jet')
@@ -578,7 +594,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("R_rad of lambda/2 dipole (Poynting) : {:.2f} Ohm".format(dipole_radiated_power(L_DIPOLE)[1]))
 
-    print("\n-- {} element ULA, d = {:.2f} lambda --".format(N, d / LAMBDA))
+    print("\n-- {} element ULA (side by side), d = {:.2f} lambda --".format(N, d / LAMBDA))
     D0, _ = compute_directivity(N, d, beta)
     hpbw, peak = compute_hpbw(N, d, beta)
     Z = build_impedance_matrix(N, d)
