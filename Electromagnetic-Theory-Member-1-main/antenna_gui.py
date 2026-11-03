@@ -47,9 +47,14 @@ try:
         compute_hpbw,
         generate_theoretical_csv,
         generate_yagi_theoretical_csv,
-        get_taper_weights
+        get_taper_weights,
+        planar_pattern,
+        planar_directivity,
+        cut_hpbw
     )
 except ImportError:
+    planar_pattern = planar_directivity = cut_hpbw = None   # planar mode needs the engine
+
     C0 = 299792458.0
     F0 = 2.44e9
     LAMBDA = C0 / F0
@@ -193,6 +198,8 @@ class AntennaDashboard:
         self.null_list = []
         self.taper = 'uniform'          # 'uniform' | 'chebyshev' | 'binomial'
         self.chebyshev_sll = 30.0       # Dolph-Chebyshev SLL target (dB)
+        self.mode = 'linear'            # 'linear' | 'planar' (N x N grid)
+        self.beta_y_deg = 0.0
 
         # CSV file paths (shared data/ folder, shown relative to the repo root)
         self.theory_csv_path = os.path.relpath(THEORETICAL_CSV, ROOT_DIR)
@@ -241,6 +248,10 @@ class AntennaDashboard:
         self.slider_beta = Slider(ax_sb, 'Phase beta(deg)', -180.0, 180.0,
                                   valinit=self.beta_deg, valstep=1.0)
 
+        ax_sby = self.fig.add_axes([0.80, 0.74, 0.16, 0.025], facecolor=slider_color)
+        self.slider_beta_y = Slider(ax_sby, 'Planar beta_y(deg)', -180.0, 180.0,
+                                    valinit=self.beta_y_deg, valstep=1.0)
+
         ax_sn = self.fig.add_axes([0.80, 0.70, 0.16, 0.025], facecolor='peachpuff')
         self.slider_null = Slider(ax_sn, 'Null Angle(deg)', 0.0, 350.0,
                                   valinit=self.null_angle_slider_val, valstep=1.0)
@@ -263,6 +274,13 @@ class AntennaDashboard:
             active=0
         )
         for lbl in self.radio_taper.labels:
+            lbl.set_fontsize(8)
+
+        # Array mode: linear ULA or N x N planar grid
+        self.fig.text(0.015, 0.105, "Array Mode:", fontsize=8, fontweight='bold')
+        ax_mode = self.fig.add_axes([0.015, 0.02, 0.10, 0.08], facecolor='lightyellow')
+        self.radio_mode = RadioButtons(ax_mode, labels=('Linear', 'Planar NxN'), active=0)
+        for lbl in self.radio_mode.labels:
             lbl.set_fontsize(8)
 
         # ------------------------------------------------------------------
@@ -302,6 +320,8 @@ class AntennaDashboard:
         self.slider_N.on_changed(self.on_slider_update)
         self.slider_d.on_changed(self.on_slider_update)
         self.slider_beta.on_changed(self.on_slider_update)
+        self.slider_beta_y.on_changed(self.on_slider_update)
+        self.radio_mode.on_clicked(self.on_mode_change)
         self.slider_null.on_changed(self.on_null_slider_change)
         self.btn_add_null.on_clicked(self.on_add_null)
         self.btn_clear_null.on_clicked(self.on_clear_nulls)
@@ -320,6 +340,14 @@ class AntennaDashboard:
         self.N = int(self.slider_N.val)
         self.d_ratio = float(self.slider_d.val)
         self.beta_deg = float(self.slider_beta.val)
+        self.beta_y_deg = float(self.slider_beta_y.val)
+        self.update_main_plot()
+
+    def on_mode_change(self, label):
+        if label.startswith('Planar') and planar_pattern is None:
+            print("  Planar mode needs antenna_math_engine (scipy) - staying in linear mode")
+            return
+        self.mode = 'planar' if label.startswith('Planar') else 'linear'
         self.update_main_plot()
 
     def on_null_slider_change(self, val):
@@ -357,6 +385,9 @@ class AntennaDashboard:
     # Main Plot Update
     # --------------------------------------------------------------------------
     def update_main_plot(self):
+        if self.mode == 'planar':
+            self.update_planar_plot()
+            return
         self.ax_main.cla()
         self.ax_main.set_theta_zero_location('N')
         self.ax_main.set_theta_direction(-1)
@@ -416,6 +447,77 @@ class AntennaDashboard:
         self.update_3d_plot(d_m, beta_rad)
 
         self.fig.canvas.draw_idle()
+
+    # --------------------------------------------------------------------------
+    # Planar N x N Array (dipoles along x, grid in the x-y plane, broadside = +z)
+    # --------------------------------------------------------------------------
+    def update_planar_plot(self):
+        self.ax_main.cla()
+        self.ax_main.set_theta_zero_location('N')
+        self.ax_main.set_theta_direction(-1)
+
+        d_m = self.d_ratio * LAMBDA
+        kw = dict(Nx=self.N, Ny=self.N, dx=d_m, dy=d_m,
+                  beta_x=np.radians(self.beta_deg), beta_y=np.radians(self.beta_y_deg),
+                  taper=self.taper)
+        D0_dBi, _, th_pk, ph_pk = planar_directivity(n_theta=181, n_phi=361, **kw)
+
+        # Elevation cut through the main beam (0 deg = broadside +z)
+        alpha = np.linspace(0.0, 2.0 * np.pi, 1441)
+        ph_c = np.radians(ph_pk)
+        th_c = np.arccos(np.clip(np.cos(alpha), -1.0, 1.0))
+        ph_cut = np.arctan2(np.sin(alpha) * np.sin(ph_c), np.sin(alpha) * np.cos(ph_c))
+        pat = planar_pattern(th_c, ph_cut, **kw)
+        pat = pat / max(np.max(pat), 1e-12)
+        hpbw = cut_hpbw(np.degrees(alpha[:-1]), pat[:-1] ** 2)
+        hpbw_str = "{:.1f} deg".format(hpbw) if hpbw is not None else "N/A"
+
+        self.ax_main.plot(alpha, pat, color='darkorange', linewidth=2.0, label='Planar cut |E|')
+        self.ax_main.fill(alpha, pat, color='darkorange', alpha=0.15)
+        self.ax_main.set_title(
+            "Planar {0}x{0}, d={1:.2f}*lambda\nCut at phi={2:.0f} deg (0 = broadside)".format(
+                self.N, self.d_ratio, ph_pk),
+            fontsize=10, pad=12)
+        self.ax_main.set_rlabel_position(45)
+        self.ax_main.legend(loc='lower right', fontsize=8)
+
+        self.info_text.set_text(
+            "Planar Metrics:\n"
+            "Frequency: {:.2f} GHz\n"
+            "D0:        {:.2f} dBi\n"
+            "HPBW:      {}\n"
+            "Beam:      th={:.0f}, ph={:.0f}\n"
+            "Nulls:     linear only".format(F0 / 1e9, D0_dBi, hpbw_str, th_pk, ph_pk))
+
+        self.update_planar_3d(kw)
+        self.fig.canvas.draw_idle()
+
+    def update_planar_3d(self, kw):
+        self.ax_3d.cla()
+        theta_vals = np.linspace(0.0, np.pi, 73)
+        phi_vals = np.linspace(0.0, 2.0 * np.pi, 73)
+        THETA, PHI = np.meshgrid(theta_vals, phi_vals)
+        R = planar_pattern(THETA, PHI, **kw)
+        R = R / max(np.max(R), 1e-12)
+
+        X = R * np.sin(THETA) * np.cos(PHI)
+        Y = R * np.sin(THETA) * np.sin(PHI)
+        Z = R * np.cos(THETA)
+        self.ax_3d.plot_surface(X, Y, Z, facecolors=plt.cm.jet(R ** 2), linewidth=0,
+                                antialiased=True, alpha=0.9, rstride=1, cstride=1)
+        self.ax_3d.set_title("Live 3D Planar Pattern\nTaper: {}".format(self.taper),
+                             fontsize=10, pad=8)
+        self.ax_3d.set_xlabel('X (dipole axis)', fontsize=8)
+        self.ax_3d.set_ylabel('Y', fontsize=8)
+        self.ax_3d.set_zlabel('Z (broadside)', fontsize=8)
+        self.ax_3d.tick_params(labelsize=6)
+        try:
+            self.ax_3d.set_box_aspect((1, 1, 1))
+        except Exception:
+            pass
+        self.ax_3d.set_xlim(-1, 1)
+        self.ax_3d.set_ylim(-1, 1)
+        self.ax_3d.set_zlim(-1, 1)
 
     # --------------------------------------------------------------------------
     # Live 3D Spherical Radiation Pattern
