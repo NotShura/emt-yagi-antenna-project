@@ -1,8 +1,8 @@
-# Consolidated dependencies for the whole project.
+# Dependencies for the whole project (the only requirements file).
 # Install once from the repo root:  pip install -r requirements.txt
 #
 # Per-member usage:
-#   numpy, scipy, matplotlib  -> Member 1 engine/GUI, Member 2 sim, Member 3 blueprints
+#   numpy, scipy, matplotlib  -> Lead engine, Member 1 GUI, Member 2 sim, Member 3 blueprints
 #   reportlab                 -> Member 2 PDF report builder (build_pdf_report.py)
 
 numpy>=1.26

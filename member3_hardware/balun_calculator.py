@@ -18,12 +18,15 @@ Also computes impedance matching parameters including:
 import numpy as np
 import json
 import os
+import sys
+
+# Shared team config (repo root): design-freeze constants
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from emt_config import C0 as C, F0
 
 # ============================================================================
 # CONSTANTS
 # ============================================================================
-C = 299_792_458       # Speed of light (m/s)
-F0 = 2.44e9           # Center frequency (Hz)
 LAMBDA_0 = C / F0     # Free-space wavelength (m)
 
 # Coaxial cable properties

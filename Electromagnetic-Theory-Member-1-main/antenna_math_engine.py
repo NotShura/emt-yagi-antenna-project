@@ -4,11 +4,23 @@
 # Project Lead: Analytical EM Modeling & Theoretical Pattern Generator
 # ==============================================================================
 # Pure ASCII implementation: No unicode characters used anywhere.
-# Compliant with Python 3.12, Windows, numpy, scipy, and matplotlib.
+# Compliant with Python 3.12+, Windows, numpy, scipy, and matplotlib.
+#
+# Contents
+#   1.  Constants (shared with the team via emt_config.py)
+#   2.  Radiation integrals: I(z) -> A_z -> E_theta, H_phi -> Poynting -> P_rad
+#   3.  N-element ULA: element factor, tapers, array factor, total pattern
+#   4.  Directivity D0 and HPBW of the ULA
+#   5.  VSWR / Gamma / S11
+#   6.  Induced EMF mutual impedance, impedance matrix, Z_in, active impedance
+#   7.  4-element Yagi-Uda solver (reads Member 2's data/optimized_dimensions.json)
+#   8.  Plots and the universal theoretical CSV (data/theoretical_pattern.csv)
 # ==============================================================================
 
 import os
+import sys
 import csv
+import warnings
 import numpy as np
 from scipy import integrate
 from scipy.special import comb as scipy_comb
@@ -16,20 +28,143 @@ from scipy.signal.windows import chebwin
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 import matplotlib.pyplot as plt
 
+# Shared team config (repo root): constants + data/ file locations
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
+from emt_config import (C0, F0, LAMBDA, Z0, SWEEP_START_HZ, SWEEP_STOP_HZ,
+                        PATTERN_STEP_DEG, THEORETICAL_CSV, SIMULATED_CSV,
+                        ensure_data_dir, load_dimensions)
+
 # ------------------------------------------------------------------------------
 # 1. Physical Constants & Design Parameters (2.44 GHz ISM Band)
 # ------------------------------------------------------------------------------
-C0 = 299792458.0              # Speed of light in vacuum (m/s)
 ETA0 = 120.0 * np.pi          # Intrinsic impedance of free space (approx 376.73 Ohm)
-F0 = 2.44e9                   # Center frequency: 2.44 GHz
-LAMBDA = C0 / F0              # Free-space wavelength (m) ~= 0.122866 m (12.29 cm)
+MU0 = ETA0 / C0               # Permeability of free space (H/m), eta0 = mu0 * c
 K0 = 2.0 * np.pi / LAMBDA     # Free-space wavenumber (rad/m)
 L_DIPOLE = LAMBDA / 2.0       # Resonant half-wave dipole length (m)
-Z0 = 50.0                     # System reference characteristic impedance (Ohm)
+
+
+def _out(name):
+    """Path for a generated plot inside this folder (independent of the cwd)."""
+    return os.path.join(SCRIPT_DIR, name)
 
 
 # ------------------------------------------------------------------------------
-# 2. Element Factor: Half-Wave Dipole
+# 2. Radiation Integrals: Thin-Wire Dipole from First Principles
+# ------------------------------------------------------------------------------
+def dipole_current(z, L, Im=1.0, k=K0):
+    """
+    Sinusoidal current distribution on a center-fed thin-wire dipole:
+        I(z) = Im * sin(k * (L/2 - |z|)),   -L/2 <= z <= L/2
+
+    Parameters:
+        z  : float or np.ndarray  Position along the wire (m).
+        L  : float                Total dipole length (m).
+        Im : complex              Current maximum (A).
+        k  : float                Wavenumber (rad/m).
+    """
+    return Im * np.sin(k * (0.5 * L - np.abs(z)))
+
+
+def vector_potential_Az(theta, L, r=1.0, Im=1.0, k=K0, num_pts=2001):
+    """
+    Far-zone magnetic vector potential of a z-directed dipole, evaluated by
+    numerically integrating the current over the wire (the radiation integral):
+
+        A_z(r, theta) = mu0 * exp(-j k r) / (4 pi r)
+                        * integral_{-L/2}^{L/2} I(z') exp(j k z' cos(theta)) dz'
+
+    Parameters:
+        theta   : float or np.ndarray  Angle from the wire axis (rad).
+        L       : float                Dipole length (m).
+        r       : float                Observation distance (m), far field.
+        Im      : complex              Current maximum (A).
+        k       : float                Wavenumber (rad/m).
+        num_pts : int                  Integration points along the wire.
+
+    Returns:
+        np.ndarray (complex)  A_z in Wb/m.
+    """
+    theta_arr = np.atleast_1d(np.asarray(theta, dtype=float))
+    z = np.linspace(-0.5 * L, 0.5 * L, num_pts)
+    I_z = dipole_current(z, L, Im=Im, k=k)
+    phase = np.exp(1j * k * np.outer(np.cos(theta_arr), z))        # (M, P)
+    radiation_integral = integrate.trapezoid(I_z[None, :] * phase, z, axis=1)
+    return MU0 * np.exp(-1j * k * r) / (4.0 * np.pi * r) * radiation_integral
+
+
+def dipole_far_fields(theta, L, r=1.0, Im=1.0, k=K0):
+    """
+    Far-zone fields of a dipole derived from the vector potential A_z:
+        A_theta = -A_z sin(theta)
+        E_theta = -j omega A_theta = j omega A_z sin(theta)
+        H_phi   = E_theta / eta0
+        W_r     = (1/2) Re(E_theta * conj(H_phi))   (time-average Poynting vector)
+
+    Returns:
+        dict with keys 'A_z', 'E_theta' (V/m), 'H_phi' (A/m), 'W_r' (W/m^2).
+    """
+    theta_arr = np.atleast_1d(np.asarray(theta, dtype=float))
+    omega = k * C0
+    A_z = vector_potential_Az(theta_arr, L, r=r, Im=Im, k=k)
+    E_theta = 1j * omega * A_z * np.sin(theta_arr)
+    H_phi = E_theta / ETA0
+    return {
+        "A_z": A_z,
+        "E_theta": E_theta,
+        "H_phi": H_phi,
+        "W_r": poynting_vector(E_theta, H_phi),
+    }
+
+
+def poynting_vector(E_theta, H_phi):
+    """
+    Radial time-average Poynting vector W_av = (1/2) Re(E x H*) for far-zone
+    fields (E_theta x H_phi points along +r).
+
+    Returns:
+        np.ndarray  Power density (W/m^2).
+    """
+    return 0.5 * np.real(np.asarray(E_theta) * np.conj(np.asarray(H_phi)))
+
+
+def dipole_radiated_power(L, Im=1.0, k=K0, r=100.0, num_theta=2001):
+    """
+    Total radiated power found by integrating the Poynting vector over a
+    far-field sphere of radius r:
+        P_rad = integral_0^{2 pi} integral_0^{pi} W_r r^2 sin(theta) dtheta dphi
+
+    Returns:
+        tuple: (P_rad_W, R_rad_ohm)
+            R_rad is referred to the current maximum: P_rad = |Im|^2 R_rad / 2.
+    """
+    theta = np.linspace(1e-6, np.pi - 1e-6, num_theta)
+    W_r = dipole_far_fields(theta, L, r=r, Im=Im, k=k)["W_r"]
+    P_rad = 2.0 * np.pi * integrate.simpson(W_r * r ** 2 * np.sin(theta), x=theta)
+    R_rad = 2.0 * P_rad / (abs(Im) ** 2)
+    return float(P_rad), float(R_rad)
+
+
+def dipole_element_factor(cos_theta, L, k=K0):
+    """
+    Closed-form result of the radiation integral for a dipole of any length:
+        F(theta) = [cos(k L/2 cos(theta)) - cos(k L/2)] / sin(theta)
+    so that E_theta = j eta0 Im exp(-j k r) / (2 pi r) * F(theta).
+
+    Parameters:
+        cos_theta : float or np.ndarray  cos of the angle from the wire axis.
+        L         : float                Dipole length (m).
+    """
+    c = np.asarray(cos_theta, dtype=float)
+    s = np.sqrt(np.clip(1.0 - c ** 2, 0.0, 1.0))
+    kh = 0.5 * k * L
+    with np.errstate(divide='ignore', invalid='ignore'):
+        F = np.where(s > 1e-9, (np.cos(kh * c) - np.cos(kh)) / s, 0.0)
+    return F
+
+
+# ------------------------------------------------------------------------------
+# 3. Element Factor: Half-Wave Dipole
 # ------------------------------------------------------------------------------
 def element_factor(theta):
     """
@@ -76,8 +211,11 @@ def get_taper_weights(N, taper='uniform', sll_db=30.0):
     """
     if taper == 'chebyshev':
         # scipy.signal.chebwin(N, at) returns Dolph-Chebyshev window of length N
-        # with sidelobe attenuation = at dB
-        w = chebwin(N, float(sll_db))
+        # with sidelobe attenuation = at dB. Its "< 45 dB" warning concerns
+        # spectral analysis only, not array synthesis, so it is silenced.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            w = chebwin(N, float(sll_db))
     elif taper == 'binomial':
         # Binomial weights: C(N-1, k) for k = 0..N-1 -> no sidelobes, wide beam
         k_vals = np.arange(N)
@@ -102,6 +240,11 @@ def array_factor(theta, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
     Computes normalized Array Factor AF(theta) for an N-element ULA.
     Supports uniform excitation AND amplitude-tapered excitation
     (Dolph-Chebyshev, Binomial) for sidelobe-level (SLL) control.
+
+    The array axis is the z-axis (theta measured from it), i.e. a collinear
+    array of z-directed dipoles, as in the pattern-multiplication examples of
+    Balanis ch. 6. The physical 4-element prototype is modeled separately by
+    the Yagi-Uda solver in section 7.
 
     Weighted AF formulation:
         AF(theta) = sum_{n=0}^{N-1} w_n * exp(j * n * psi)
@@ -146,7 +289,7 @@ def array_factor(theta, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
 
 
 # ------------------------------------------------------------------------------
-# 4. Total Radiation Pattern (Pattern Multiplication Theorem)
+# 3c. Total Radiation Pattern (Pattern Multiplication Theorem)
 # ------------------------------------------------------------------------------
 def total_pattern(theta, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
     """
@@ -173,21 +316,20 @@ def total_pattern(theta, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
 
 
 # ------------------------------------------------------------------------------
-# 5. Directivity Computation via Numerical Quadrature
+# 4. Directivity Computation via Numerical Quadrature
 # ------------------------------------------------------------------------------
-def compute_directivity(N=4, d=None, beta=0.0):
+def compute_directivity(N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
     """
     Computes maximum directivity D0 using solid-angle radiation integration.
     D0 = 4 * pi * U_max / P_rad
     where P_rad = 2 * pi * integral_0^pi |E_total(theta)|^2 * sin(theta) d(theta)
 
     Parameters:
-        N    : int
-            Number of elements.
-        d    : float, optional
-            Inter-element spacing in meters.
-        beta : float, optional
-            Progressive phase shift in radians.
+        N      : int              Number of elements.
+        d      : float, optional  Inter-element spacing in meters.
+        beta   : float, optional  Progressive phase shift in radians.
+        taper  : str              Amplitude taper: 'uniform'|'chebyshev'|'binomial'
+        sll_db : float            Chebyshev SLL target (dB).
 
     Returns:
         tuple: (D0_dBi, D0_linear)
@@ -198,7 +340,7 @@ def compute_directivity(N=4, d=None, beta=0.0):
         d = LAMBDA / 2.0
 
     def integrand(th):
-        E = total_pattern(th, N=N, d=d, beta=beta)
+        E = total_pattern(th, N=N, d=d, beta=beta, taper=taper, sll_db=sll_db)
         return (E ** 2) * np.sin(th)
 
     # High-precision numerical integration over polar angle theta in [0, pi]
@@ -207,7 +349,7 @@ def compute_directivity(N=4, d=None, beta=0.0):
 
     # Find peak radiation intensity U_max
     theta_dense = np.linspace(0.0, np.pi, 20000)
-    E_dense = total_pattern(theta_dense, N=N, d=d, beta=beta)
+    E_dense = total_pattern(theta_dense, N=N, d=d, beta=beta, taper=taper, sll_db=sll_db)
     U_max = np.max(E_dense ** 2)
 
     if P_rad <= 1e-15:
@@ -219,20 +361,19 @@ def compute_directivity(N=4, d=None, beta=0.0):
 
 
 # ------------------------------------------------------------------------------
-# 6. Half-Power Beamwidth (HPBW)
+# 4b. Half-Power Beamwidth (HPBW)
 # ------------------------------------------------------------------------------
-def compute_hpbw(N=4, d=None, beta=0.0):
+def compute_hpbw(N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
     """
     Computes Half-Power Beamwidth (HPBW) in degrees.
     Locates the angular separation between the 3 dB points (|E| = max / sqrt(2)).
 
     Parameters:
-        N    : int
-            Number of elements.
-        d    : float, optional
-            Inter-element spacing in meters.
-        beta : float, optional
-            Progressive phase shift in radians.
+        N      : int              Number of elements.
+        d      : float, optional  Inter-element spacing in meters.
+        beta   : float, optional  Progressive phase shift in radians.
+        taper  : str              Amplitude taper: 'uniform'|'chebyshev'|'binomial'
+        sll_db : float            Chebyshev SLL target (dB).
 
     Returns:
         tuple: (hpbw_deg, theta_max_deg)
@@ -243,7 +384,7 @@ def compute_hpbw(N=4, d=None, beta=0.0):
         d = LAMBDA / 2.0
 
     theta_dense = np.linspace(1e-6, np.pi - 1e-6, 50000)
-    pat = total_pattern(theta_dense, N=N, d=d, beta=beta)
+    pat = total_pattern(theta_dense, N=N, d=d, beta=beta, taper=taper, sll_db=sll_db)
     idx_max = int(np.argmax(pat))
     peak_val = pat[idx_max]
     theta_max_deg = float(np.degrees(theta_dense[idx_max]))
@@ -273,7 +414,7 @@ def compute_hpbw(N=4, d=None, beta=0.0):
 
 
 # ------------------------------------------------------------------------------
-# 7. Transmission Line & Reflection Parameters (VSWR, Gamma, S11)
+# 5. Transmission Line & Reflection Parameters (VSWR, Gamma, S11)
 # ------------------------------------------------------------------------------
 def compute_vswr(Z_in, Z0_ref=50.0):
     """
@@ -310,7 +451,7 @@ def compute_vswr(Z_in, Z0_ref=50.0):
 
 
 # ------------------------------------------------------------------------------
-# 8. Mutual Impedance via Induced EMF Method (Fully Vectorized NumPy)
+# 6. Mutual Impedance via Induced EMF Method (Fully Vectorized NumPy)
 # ------------------------------------------------------------------------------
 def mutual_impedance_emf(d_sep, L_elem=None, num_pts=2000):
     """
@@ -365,10 +506,53 @@ def mutual_impedance_emf(d_sep, L_elem=None, num_pts=2000):
     return complex(Z12)
 
 
+def mutual_impedance_general(L1, L2, rho, k=K0, min_pts=2001):
+    """
+    Induced EMF mutual impedance between two parallel, side-by-side dipoles of
+    ARBITRARY lengths L1, L2 at separation rho (referred to the current maxima).
+    Setting rho = wire radius gives the self-impedance of a finite-thickness
+    dipole (classical induced EMF self-impedance).
+
+    Near field of dipole 1 on the axis of dipole 2 (h1 = L1/2):
+        Ez21(z) = -j eta0 Im1 / (4 pi) * [ exp(-j k R1)/R1 + exp(-j k R2)/R2
+                                         - 2 cos(k h1) exp(-j k R0)/R0 ]
+        R1 = sqrt(rho^2 + (z - h1)^2), R2 = sqrt(rho^2 + (z + h1)^2),
+        R0 = sqrt(rho^2 + z^2)
+    and
+        Z21 = -(1 / (Im1 Im2)) * integral_{-h2}^{h2} Ez21(z) I2(z) dz
+
+    Parameters:
+        L1, L2  : float  Lengths of dipole 1 and 2 (m).
+        rho     : float  Center-to-center separation, or wire radius for self (m).
+        k       : float  Wavenumber (rad/m), lets the solver sweep frequency.
+        min_pts : int    Minimum integration points (refined for small rho).
+
+    Returns:
+        complex  Z21 (Ohm), referred to the current maxima.
+    """
+    h1 = 0.5 * L1
+    h2 = 0.5 * L2
+    # Resolve the 1/R peaks: keep dz well below rho
+    num_pts = int(max(min_pts, np.ceil(L2 / (rho / 100.0)) + 1))
+    z = np.linspace(-h2, h2, num_pts)
+
+    R1 = np.sqrt(rho ** 2 + (z - h1) ** 2)
+    R2 = np.sqrt(rho ** 2 + (z + h1) ** 2)
+    R0 = np.sqrt(rho ** 2 + z ** 2)
+    G = (np.exp(-1j * k * R1) / R1 + np.exp(-1j * k * R2) / R2
+         - 2.0 * np.cos(k * h1) * np.exp(-1j * k * R0) / R0)
+    Ez = -1j * (ETA0 / (4.0 * np.pi)) * G
+    I2 = np.sin(k * (h2 - np.abs(z)))
+
+    return complex(-integrate.trapezoid(Ez * I2, z))
+
+
 def build_impedance_matrix(N=4, d=None):
     """
     Constructs the N x N mutual impedance matrix [Z] using vectorized
     NumPy operations for all inter-element separations.
+
+    Elements are half-wave dipoles placed side by side (parallel) at spacing d.
 
     Parameters:
         N : int
@@ -405,12 +589,16 @@ def build_impedance_matrix(N=4, d=None):
 
 
 # ------------------------------------------------------------------------------
-# 9. Driving-Point Impedance
+# 6b. Driving-Point and Active Impedance
 # ------------------------------------------------------------------------------
 def driving_point_impedance(N=4, d=None):
     """
-    Computes driving-point active input impedance of the array feed element
-    accounting for mutual coupling and parasitic loading from neighboring elements.
+    Computes the input impedance of element 0 when it is the only driven
+    element and all other elements are short-circuited parasites.
+
+    Solves the full circuit equations [V] = [Z][I] with V = [1, 0, ..., 0],
+    so coupling between every pair of elements (including parasite-to-parasite)
+    is included:  Z_in = V_0 / I_0.
 
     Parameters:
         N : int
@@ -426,20 +614,259 @@ def driving_point_impedance(N=4, d=None):
         d = LAMBDA / 2.0
 
     Z = build_impedance_matrix(N=N, d=d)
-    Zin = Z[0, 0]
+    V = np.zeros(N, dtype=complex)
+    V[0] = 1.0
+    I = np.linalg.solve(Z, V)
+    return complex(V[0] / I[0])
 
-    # Active driving impedance contribution from mutual coupling
-    for n in range(1, N):
-        if abs(Z[n, n]) > 1e-12:
-            Zin -= (Z[0, n] * Z[n, 0]) / Z[n, n]
 
-    return complex(Zin)
+def active_impedance(N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
+    """
+    Active (scan) impedance of every element of a fully driven phased array:
+        Z_act_n = sum_m Z_nm * I_m / I_n,   I_m = w_m * exp(j * m * beta)
+
+    This is the impedance each feed actually sees while the beam is steered,
+    and it changes with beta because of mutual coupling.
+
+    Returns:
+        np.ndarray (complex, shape (N,))  Active impedance of each element (Ohm).
+    """
+    if d is None:
+        d = LAMBDA / 2.0
+
+    Z = build_impedance_matrix(N=N, d=d)
+    w = get_taper_weights(N, taper=taper, sll_db=sll_db)
+    I = w * np.exp(1j * beta * np.arange(N))
+    return (Z @ I) / I
 
 
 # ------------------------------------------------------------------------------
-# 10. Pattern Plotting Routines (plt.close() non-interactive mode)
+# 7. Yagi-Uda Solver (the physical prototype)
 # ------------------------------------------------------------------------------
-def plot_polar_pattern(N=4, d=None, beta=0.0, filename="radiation_pattern_polar.png"):
+# Geometry convention (same as Member 2 and Member 4's turntable):
+#   - elements are parallel to z, spaced along the boom (x-axis)
+#   - directors point to +x, so the main beam is at phi = 0 deg
+#   - the azimuth (H-plane, theta = 90 deg) cut is the measured pattern
+YAGI_ELEMENTS = ("reflector", "driven_dipole", "director_1", "director_2")
+
+
+def load_yagi_design(dims=None):
+    """
+    Builds the Yagi geometry from Member 2's data/optimized_dimensions.json.
+
+    Returns:
+        dict: names, lengths_m, x_m (boom position relative to the driven
+              element), radius_m, feed_index, source
+    """
+    if dims is None:
+        dims = load_dimensions()
+    if dims is None:
+        raise FileNotFoundError(
+            "data/optimized_dimensions.json not found - run "
+            "EMT_Member2/simulate_yagi.py (or run_pipeline.py) first.")
+
+    pos = dims["boom_positions_mm"]
+    x_drv = pos["driven_dipole"]
+    return {
+        "names": YAGI_ELEMENTS,
+        "lengths_m": np.array([dims[n + "_length_mm"] for n in YAGI_ELEMENTS]) * 1e-3,
+        "x_m": np.array([pos[n] - x_drv for n in YAGI_ELEMENTS]) * 1e-3,
+        "radius_m": dims["wire_radius_mm"] * 1e-3,
+        "feed_index": YAGI_ELEMENTS.index("driven_dipole"),
+        "source": dims.get("_source", "data/optimized_dimensions.json"),
+    }
+
+
+def yagi_impedance_matrix(design, freq_hz=F0):
+    """
+    Full Yagi impedance matrix from the induced EMF method, referred to the
+    element terminals (center): Z_mn = Z_mn(max) / (sin(k h_m) sin(k h_n)).
+
+    Diagonal terms use the wire radius as the separation (self-impedance).
+    """
+    k = 2.0 * np.pi * freq_hz / C0
+    L = design["lengths_m"]
+    x = design["x_m"]
+    n_el = len(L)
+    Z = np.zeros((n_el, n_el), dtype=complex)
+    for m in range(n_el):
+        for p in range(m, n_el):
+            rho = design["radius_m"] if m == p else abs(x[m] - x[p])
+            Z_max = mutual_impedance_general(L[m], L[p], rho, k=k)
+            Z[m, p] = Z[p, m] = Z_max / (np.sin(0.5 * k * L[m]) * np.sin(0.5 * k * L[p]))
+    return Z
+
+
+def solve_yagi(design=None, freq_hz=F0, v_feed=1.0):
+    """
+    Solves the Yagi circuit equations [V] = [Z][I]: only the driven element is
+    fed (V = v_feed); the reflector and directors are shorted parasites.
+
+    Returns:
+        dict: Z (matrix), I_base (terminal currents), I_max (current maxima),
+              Z_in, k, freq_hz, design
+    """
+    if design is None:
+        design = load_yagi_design()
+    k = 2.0 * np.pi * freq_hz / C0
+    Z = yagi_impedance_matrix(design, freq_hz)
+    V = np.zeros(len(design["lengths_m"]), dtype=complex)
+    V[design["feed_index"]] = v_feed
+    I_base = np.linalg.solve(Z, V)
+    I_max = I_base / np.sin(0.5 * k * design["lengths_m"])
+    return {
+        "Z": Z,
+        "I_base": I_base,
+        "I_max": I_max,
+        "Z_in": complex(v_feed / I_base[design["feed_index"]]),
+        "k": k,
+        "freq_hz": freq_hz,
+        "design": design,
+    }
+
+
+def _yagi_array_sum(cos_theta, u_x, sol):
+    """
+    sum_n Im_n F_n(theta) exp(j k x_n u_x), with u_x = sin(theta) cos(phi).
+    E_theta = j eta0 exp(-j k r) / (2 pi r) times this sum.
+    """
+    design = sol["design"]
+    k = sol["k"]
+    S = 0.0
+    for Im, L, x in zip(sol["I_max"], design["lengths_m"], design["x_m"]):
+        S = S + Im * dipole_element_factor(cos_theta, L, k=k) * np.exp(1j * k * x * u_x)
+    return S
+
+
+def yagi_far_fields(theta, phi, sol, r=1.0):
+    """
+    Far-zone E_theta, H_phi and Poynting vector of the solved Yagi.
+
+    Parameters:
+        theta, phi : float or np.ndarray  Spherical angles (rad), broadcastable.
+        sol        : dict                 Result of solve_yagi().
+        r          : float                Observation distance (m).
+
+    Returns:
+        dict with keys 'E_theta', 'H_phi', 'W_r', 'U' (radiation intensity W/sr).
+    """
+    th = np.asarray(theta, dtype=float)
+    ph = np.asarray(phi, dtype=float)
+    S = _yagi_array_sum(np.cos(th), np.sin(th) * np.cos(ph), sol)
+    E_theta = 1j * ETA0 * np.exp(-1j * sol["k"] * r) / (2.0 * np.pi * r) * S
+    H_phi = E_theta / ETA0
+    W_r = poynting_vector(E_theta, H_phi)
+    return {"E_theta": E_theta, "H_phi": H_phi, "W_r": W_r, "U": W_r * r ** 2}
+
+
+def yagi_radiated_power(sol, n_theta=181, n_phi=361):
+    """P_rad = integral of the radiation intensity U over the full sphere (W)."""
+    theta = np.linspace(0.0, np.pi, n_theta)
+    phi = np.linspace(0.0, 2.0 * np.pi, n_phi)
+    TH, PH = np.meshgrid(theta, phi, indexing='ij')
+    U = yagi_far_fields(TH, PH, sol)["U"]
+    inner = integrate.simpson(U * np.sin(TH), x=theta, axis=0)
+    return float(integrate.simpson(inner, x=phi))
+
+
+def yagi_h_plane(angles_deg, sol, P_rad):
+    """Directivity (linear) in the azimuth / H-plane cut, phi = angle, theta = 90 deg."""
+    phi = np.radians(np.asarray(angles_deg, dtype=float))
+    S = _yagi_array_sum(np.zeros_like(phi), np.cos(phi), sol)
+    U = ETA0 / (8.0 * np.pi ** 2) * np.abs(S) ** 2
+    return 4.0 * np.pi * U / P_rad
+
+
+def yagi_e_plane(angles_deg, sol, P_rad):
+    """
+    Directivity (linear) in the E-plane (the x-z plane containing the elements
+    and the boom). angle = 0 deg is along the boom toward the directors,
+    90 deg is along the element tips.
+    """
+    alpha = np.radians(np.asarray(angles_deg, dtype=float))
+    S = _yagi_array_sum(np.sin(alpha), np.cos(alpha), sol)
+    U = ETA0 / (8.0 * np.pi ** 2) * np.abs(S) ** 2
+    return 4.0 * np.pi * U / P_rad
+
+
+def _cut_hpbw(angles_deg, power):
+    """
+    Half-power beamwidth of a periodic 360-degree cut sampled on a uniform
+    grid. Walks outward from the peak and interpolates the -3 dB crossings.
+    """
+    p = np.asarray(power, dtype=float)
+    n = len(p)
+    step = float(angles_deg[1] - angles_deg[0])
+    i0 = int(np.argmax(p))
+    half = 0.5 * p[i0]
+
+    def crossing(direction):
+        for j in range(1, n // 2):
+            p_prev = p[(i0 + direction * (j - 1)) % n]
+            p_cur = p[(i0 + direction * j) % n]
+            if p_cur < half:
+                return (j - 1) + (p_prev - half) / (p_prev - p_cur)
+        return None
+
+    right, left = crossing(+1), crossing(-1)
+    if right is None or left is None:
+        return None
+    return float((right + left) * step)
+
+
+def yagi_metrics(design=None, freq_hz=F0):
+    """
+    Complete theoretical figures of merit for the Yagi at freq_hz.
+
+    Returns:
+        dict: Z_in, Gamma, vswr, S11_dB, D0_dBi, front_to_back_dB,
+              hpbw_h_deg, hpbw_e_deg, P_rad_W, P_in_W, power_balance_pct,
+              currents (normalized |I| and phase per element), sol
+    """
+    sol = solve_yagi(design, freq_hz)
+    design = sol["design"]
+    P_rad = yagi_radiated_power(sol)
+
+    angles = np.arange(0.0, 360.0, 0.1)
+    D_h = yagi_h_plane(angles, sol, P_rad)
+    D_e = yagi_e_plane(angles, sol, P_rad)
+
+    Gamma, vswr, S11_dB = compute_vswr(sol["Z_in"], Z0_ref=Z0)
+
+    # Power balance: circuit input power (induced EMF) vs Poynting-integrated P_rad
+    I_feed = sol["I_base"][design["feed_index"]]
+    P_in = 0.5 * abs(I_feed) ** 2 * sol["Z_in"].real
+
+    I_norm = sol["I_base"] / I_feed
+    return {
+        "Z_in": sol["Z_in"],
+        "Gamma": Gamma,
+        "vswr": vswr,
+        "S11_dB": S11_dB,
+        "D0_dBi": float(10.0 * np.log10(max(D_h.max(), D_e.max()))),
+        "front_to_back_dB": float(10.0 * np.log10(D_h[0] / D_h[len(angles) // 2])),
+        "hpbw_h_deg": _cut_hpbw(angles, D_h),
+        "hpbw_e_deg": _cut_hpbw(angles, D_e),
+        "P_rad_W": P_rad,
+        "P_in_W": float(P_in),
+        "power_balance_pct": float(100.0 * (P_rad - P_in) / P_in),
+        "currents": [(name, float(abs(i)), float(np.degrees(np.angle(i))))
+                     for name, i in zip(design["names"], I_norm)],
+        "sol": sol,
+    }
+
+
+def yagi_impedance_sweep(freqs_hz, design=None):
+    """Input impedance Z_in(f) of the Yagi, re-solving the full system at each f."""
+    if design is None:
+        design = load_yagi_design()
+    return np.array([solve_yagi(design, f)["Z_in"] for f in freqs_hz])
+
+
+# ------------------------------------------------------------------------------
+# 8. Pattern Plotting Routines (plt.close() non-interactive mode)
+# ------------------------------------------------------------------------------
+def plot_polar_pattern(N=4, d=None, beta=0.0, filename=_out("radiation_pattern_polar.png")):
     """
     Generates and saves a 2D normalized polar radiation pattern plot (full 360 deg).
     """
@@ -473,10 +900,10 @@ def plot_polar_pattern(N=4, d=None, beta=0.0, filename="radiation_pattern_polar.
 
     fig.savefig(filename, dpi=150)
     plt.close(fig)
-    print("  [Saved] {}".format(filename))
+    print("  [Saved] {}".format(os.path.basename(filename)))
 
 
-def plot_beam_steering(N=4, d=None, filename="beam_steering.png"):
+def plot_beam_steering(N=4, d=None, filename=_out("beam_steering.png")):
     """
     Plots a family of radiation patterns for beta ranging from -90 to +90 deg.
     Demonstrates electronic beam scanning capability.
@@ -513,33 +940,38 @@ def plot_beam_steering(N=4, d=None, filename="beam_steering.png"):
 
     fig.savefig(filename, dpi=150)
     plt.close(fig)
-    print("  [Saved] {}".format(filename))
+    print("  [Saved] {}".format(os.path.basename(filename)))
 
 
-def plot_vswr_s11_sweep(f_start=2.0e9, f_stop=3.0e9, nf=201, filename="vswr_s11_sweep.png"):
+def plot_vswr_s11_sweep(f_start=SWEEP_START_HZ, f_stop=SWEEP_STOP_HZ, nf=201,
+                        filename=_out("vswr_s11_sweep.png"), design=None):
     """
-    Frequency sweep showing VSWR and Return Loss S11 across 2.0 GHz - 3.0 GHz.
+    Frequency sweep of the 4-element Yagi's VSWR and Return Loss S11 across
+    2.0 GHz - 3.0 GHz. Z_in(f) comes from re-solving the induced EMF circuit
+    equations at every frequency (element lengths and spacings held fixed).
+
+    Returns:
+        tuple: (freqs_hz, Z_in array)
     """
     freqs = np.linspace(f_start, f_stop, nf)
+    Z_in = yagi_impedance_sweep(freqs, design)
     vswr_list = []
     s11_list = []
-
-    for f in freqs:
-        reactance_approx = 42.54 * (f - F0) / 0.05e9
-        Z_elem = complex(73.13, reactance_approx)
-        _, vswr_val, s11_val = compute_vswr(Z_elem, Z0_ref=50.0)
+    for z in Z_in:
+        _, vswr_val, s11_val = compute_vswr(z, Z0_ref=Z0)
         vswr_list.append(min(vswr_val, 10.0))
         s11_list.append(s11_val)
+    vswr_arr = np.array(vswr_list)
 
     freq_ghz = freqs / 1e9
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7))
 
-    ax1.plot(freq_ghz, vswr_list, color='navy', linewidth=2.0, label='Array Element VSWR')
+    ax1.plot(freq_ghz, vswr_arr, color='navy', linewidth=2.0, label='Yagi VSWR (induced EMF)')
     ax1.axhline(y=2.0, color='red', linestyle='--', linewidth=1.2, label='VSWR = 2.0 Threshold')
     ax1.axvline(x=F0 / 1e9, color='green', linestyle=':', linewidth=1.2, label='f0 = {:.2f} GHz'.format(F0 / 1e9))
     ax1.set_xlabel('Frequency (GHz)')
     ax1.set_ylabel('VSWR')
-    ax1.set_title('VSWR vs Frequency')
+    ax1.set_title('VSWR vs Frequency - 4-Element Yagi (Theory)')
     ax1.set_ylim([1.0, 10.0])
     ax1.grid(True, linestyle=':', alpha=0.6)
     ax1.legend(loc='upper right')
@@ -556,15 +988,94 @@ def plot_vswr_s11_sweep(f_start=2.0e9, f_stop=3.0e9, nf=201, filename="vswr_s11_
     fig.tight_layout()
     fig.savefig(filename, dpi=150)
     plt.close(fig)
-    print("  [Saved] {}".format(filename))
+    print("  [Saved] {}".format(os.path.basename(filename)))
+    return freqs, Z_in
 
 
-# ------------------------------------------------------------------------------
-# 11. Theoretical CSV Generator: Universal 36-Row Format
-# ------------------------------------------------------------------------------
-def generate_theoretical_csv(filename="theoretical_pattern.csv", N=4, d=None, beta=0.0):
+def plot_yagi_patterns(metrics, filename=_out("yagi_theory_vs_sim.png"), floor_db=-30.0):
     """
-    Generates theoretical pattern CSV with exactly 36 rows:
+    H-plane and E-plane theoretical Yagi patterns (dBi). The H-plane panel
+    also overlays Member 2's simulated CSV when data/simulated_pattern.csv exists.
+    """
+    sol = metrics["sol"]
+    P_rad = metrics["P_rad_W"]
+    angles = np.arange(0.0, 360.5, 0.5)
+    g_h = 10.0 * np.log10(np.maximum(yagi_h_plane(angles, sol, P_rad), 1e-12))
+    g_e = 10.0 * np.log10(np.maximum(yagi_e_plane(angles, sol, P_rad), 1e-12))
+    r_max = np.ceil(metrics["D0_dBi"] / 5.0) * 5.0 + 5.0
+    r_min = r_max + floor_db
+
+    fig, axes = plt.subplots(1, 2, subplot_kw={'projection': 'polar'}, figsize=(13, 6.5))
+    panels = [
+        (axes[0], g_h, "H-plane / azimuth (measured cut)\nHPBW {:.0f} deg, F/B {:.1f} dB".format(
+            metrics["hpbw_h_deg"], metrics["front_to_back_dB"])),
+        (axes[1], g_e, "E-plane (plane of the elements)\nHPBW {:.0f} deg".format(
+            metrics["hpbw_e_deg"])),
+    ]
+    for ax, g, title in panels:
+        ax.plot(np.radians(angles), np.maximum(g, r_min), color='royalblue',
+                linewidth=2.0, label='Theory (induced EMF)')
+        ax.set_theta_zero_location('N')
+        ax.set_theta_direction(-1)
+        ax.set_rlim(r_min, r_max)
+        ax.set_rlabel_position(45)
+        ax.set_title(title, fontsize=10, pad=14)
+
+    if os.path.exists(SIMULATED_CSV):
+        sim = np.genfromtxt(SIMULATED_CSV, delimiter=',', skip_header=1)
+        ang_s = np.append(sim[:, 0], sim[0, 0] + 360.0)
+        g_s = np.append(sim[:, 1], sim[0, 1])
+        axes[0].plot(np.radians(ang_s), np.maximum(g_s, r_min), color='crimson',
+                     linestyle='--', marker='o', markersize=3, linewidth=1.5,
+                     label='Member 2 simulated')
+    for ax in axes:
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.06), ncol=2, fontsize=8)
+
+    fig.suptitle("4-Element 2.44 GHz Yagi-Uda - Theoretical Directivity (dBi), "
+                 "D0 = {:.2f} dBi".format(metrics["D0_dBi"]), fontsize=12)
+    fig.tight_layout(rect=(0.0, 0.03, 1.0, 0.95))
+    fig.savefig(filename, dpi=150)
+    plt.close(fig)
+    print("  [Saved] {}".format(os.path.basename(filename)))
+
+
+# ------------------------------------------------------------------------------
+# 8b. Theoretical CSV Generators: Universal 36-Row Format
+# ------------------------------------------------------------------------------
+def generate_yagi_theoretical_csv(filename=THEORETICAL_CSV, design=None, freq_hz=F0,
+                                  metrics=None):
+    """
+    Writes the team's theoretical pattern CSV from the Yagi solver: the
+    azimuth (H-plane) directivity in dBi at 0, 10, ..., 350 deg, with 0 deg
+    toward the directors. Same convention as Member 2's simulated CSV
+    (floored at 40 dB below the peak), so Member 1 can overlay them directly.
+
+    Returns:
+        tuple: (angles_deg, gain_dBi)
+    """
+    if metrics is None:
+        metrics = yagi_metrics(design, freq_hz)
+    angles_deg = np.arange(0, 360, PATTERN_STEP_DEG)
+    D = yagi_h_plane(angles_deg, metrics["sol"], metrics["P_rad_W"])
+    D = np.maximum(D, D.max() * 1e-4)
+    gain_dBi = 10.0 * np.log10(D)
+
+    if os.path.dirname(filename):
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, mode='w', newline='', encoding='ascii') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(["angle_deg", "gain_dBi"])
+        for ang, g in zip(angles_deg, gain_dBi):
+            writer.writerow([int(ang), "{:.2f}".format(g)])
+
+    print("  [Saved] {} ({} rows, Yagi H-plane theory)".format(
+        os.path.basename(filename), len(angles_deg)))
+    return angles_deg, gain_dBi
+
+
+def generate_theoretical_csv(filename=_out("ula_theoretical_pattern.csv"), N=4, d=None, beta=0.0):
+    """
+    Generates a 36-row pattern CSV for the N-element ULA:
     angle_deg,gain_dBi
     0,-12.3
     10,-10.1
@@ -572,7 +1083,8 @@ def generate_theoretical_csv(filename="theoretical_pattern.csv", N=4, d=None, be
     350,-11.2
 
     The pattern is normalized to 0 dBi relative peak and then offset by D0 (dBi)
-    to provide absolute theoretical directive gain.
+    to provide absolute theoretical directive gain. For the team's overlay of
+    the physical antenna use generate_yagi_theoretical_csv() instead.
     """
     if d is None:
         d = LAMBDA / 2.0
@@ -601,14 +1113,14 @@ def generate_theoretical_csv(filename="theoretical_pattern.csv", N=4, d=None, be
         for ang, g in zip(angles_deg, gain_dBi):
             writer.writerow([int(ang), "{:.2f}".format(g)])
 
-    print("  [Saved] {} (36 rows, 0 to 350 deg in 10 deg steps)".format(filename))
+    print("  [Saved] {} (36 rows, 0 to 350 deg in 10 deg steps)".format(os.path.basename(filename)))
 
 
 # ------------------------------------------------------------------------------
 # 3D Spherical Radiation Pattern Plot (Gap 1 fix)
 # ------------------------------------------------------------------------------
 def plot_3d_spherical_pattern(N=4, d=None, beta=0.0, taper='uniform',
-                              filename="radiation_3d_spherical.png"):
+                              filename=_out("radiation_3d_spherical.png")):
     """
     Renders the full 3D spherical radiation pattern of the array by rotating
     the azimuthally-symmetric ULA pattern around the array axis (z-axis).
@@ -672,10 +1184,10 @@ def plot_3d_spherical_pattern(N=4, d=None, beta=0.0, taper='uniform',
     fig.tight_layout()
     fig.savefig(filename, dpi=150)
     plt.close(fig)
-    print("  [Saved] {}".format(filename))
+    print("  [Saved] {}".format(os.path.basename(filename)))
 
 
-def _compare_tapers(N=4, d=None, beta=0.0):
+def _compare_tapers(N=4, d=None, beta=0.0, filename=_out("taper_comparison.png")):
     """Save a 3-panel polar comparison of uniform, Chebyshev, binomial tapers."""
     if d is None:
         d = LAMBDA / 2.0
@@ -702,12 +1214,13 @@ def _compare_tapers(N=4, d=None, beta=0.0):
             N, d / LAMBDA),
         fontsize=12, y=1.02)
     fig.tight_layout()
-    fig.savefig("taper_comparison.png", dpi=150)
+    fig.savefig(filename, dpi=150)
     plt.close(fig)
-    print("  [Saved] taper_comparison.png")
+    print("  [Saved] {}".format(os.path.basename(filename)))
+
 
 # ------------------------------------------------------------------------------
-# 12. Main Execution Routine
+# 9. Main Execution Routine
 # ------------------------------------------------------------------------------
 if __name__ == "__main__":
     N_elements = 4
@@ -721,10 +1234,16 @@ if __name__ == "__main__":
     print("  Operating Frequency : {:.3f} GHz".format(F0 / 1e9))
     print("  Wavelength (lambda) : {:.3f} cm ({:.6f} m)".format(LAMBDA * 1e2, LAMBDA))
     print("  Element Length      : {:.3f} cm (Half-wave Dipole)".format(L_DIPOLE * 1e2))
+
+    # 0. Radiation integral check: A_z -> E, H -> Poynting -> R_rad of lambda/2 dipole
+    P_hw, R_hw = dipole_radiated_power(L_DIPOLE)
+    print("  R_rad (lambda/2, from Poynting integration) : {:.2f} Ohm  (textbook 73.08)".format(R_hw))
+
+    print("-" * 65)
+    print("  [A] N-ELEMENT UNIFORM LINEAR ARRAY (beamforming model)")
     print("  Array Elements (N)  : {}".format(N_elements))
     print("  Element Spacing (d) : {:.2f} lambda = {:.3f} cm".format(d_spacing / LAMBDA, d_spacing * 1e2))
     print("  Progressive Phase   : {:.1f} deg".format(float(np.degrees(beta_phase))))
-    print("-" * 65)
 
     # 1. Directivity
     D0_dBi, D0_linear = compute_directivity(N_elements, d_spacing, beta_phase)
@@ -739,39 +1258,54 @@ if __name__ == "__main__":
         print("  HPBW (3 dB)         : Could not be resolved")
 
     # 3. Impedance Matrix
-    print("-" * 65)
-    print("  Computing Mutual Impedance Matrix via Induced EMF method...")
     Z_mat = build_impedance_matrix(N=N_elements, d=d_spacing)
     Z11 = Z_mat[0, 0]
     Z12 = Z_mat[0, 1]
     print("  Z_11 (Self)         : {:+.2f} {:+.2f}j Ohm".format(Z11.real, Z11.imag))
     print("  Z_12 (Mutual)       : {:+.2f} {:+.2f}j Ohm".format(Z12.real, Z12.imag))
+    Z_act = active_impedance(N_elements, d_spacing, beta_phase)
+    print("  Z_active (all fed)  : " + ", ".join(
+        "{:.1f}{:+.1f}j".format(z.real, z.imag) for z in Z_act) + " Ohm")
 
-    # 4. Driving-Point Impedance & VSWR
-    Z_in = driving_point_impedance(N=N_elements, d=d_spacing)
-    print("  Z_in (Active Feed)  : {:+.2f} {:+.2f}j Ohm".format(Z_in.real, Z_in.imag))
-
-    Gamma, vswr, S11 = compute_vswr(Z_in, Z0_ref=Z0)
-    print("  |Gamma|             : {:.4f}, Angle = {:.1f} deg".format(
-        abs(Gamma), float(np.degrees(np.angle(Gamma)))))
-    print("  VSWR                : {:.3f}  ({})".format(
-        vswr, 'MATCHED (< 2.0)' if vswr < 2.0 else 'NEEDS MATCHING'))
-    print("  S11 Return Loss     : {:.2f} dB".format(S11))
+    # 4. Yagi-Uda (the physical prototype)
+    print("-" * 65)
+    print("  [B] 4-ELEMENT YAGI-UDA (physical prototype, induced EMF solver)")
+    design = load_yagi_design()
+    print("  Geometry source     : {}".format(design["source"]))
+    for name, L, x in zip(design["names"], design["lengths_m"], design["x_m"]):
+        print("    {:<14s} L = {:5.1f} mm ({:.3f} lambda), x = {:+6.1f} mm".format(
+            name, L * 1e3, L / LAMBDA, x * 1e3))
+    ym = yagi_metrics(design)
+    print("  Element currents (relative to driven):")
+    for name, mag, ph in ym["currents"]:
+        print("    {:<14s} |I| = {:.3f}, angle = {:+7.1f} deg".format(name, mag, ph))
+    print("  Z_in (driven)       : {:+.2f} {:+.2f}j Ohm".format(ym["Z_in"].real, ym["Z_in"].imag))
+    print("  VSWR / S11          : {:.3f} / {:.2f} dB  ({})".format(
+        ym["vswr"], ym["S11_dB"], 'MATCHED (< 2.0)' if ym["vswr"] < 2.0 else 'NEEDS MATCHING'))
+    print("  Directivity (D0)    : {:.2f} dBi".format(ym["D0_dBi"]))
+    print("  Front-to-Back       : {:.2f} dB".format(ym["front_to_back_dB"]))
+    print("  HPBW H / E plane    : {:.1f} / {:.1f} deg".format(ym["hpbw_h_deg"], ym["hpbw_e_deg"]))
+    print("  Power balance       : P_rad (Poynting) vs P_in (circuit) differ by {:+.2f} %".format(
+        ym["power_balance_pct"]))
     print("=" * 65)
 
     # 5. Save CSV & Plots
     print("\nGenerating deliverables...")
-    generate_theoretical_csv("theoretical_pattern.csv", N=N_elements, d=d_spacing, beta=beta_phase)
-    plot_polar_pattern(N=N_elements, d=d_spacing, beta=beta_phase, filename="radiation_pattern_polar.png")
-    plot_beam_steering(N=N_elements, d=d_spacing, filename="beam_steering.png")
-    plot_vswr_s11_sweep(filename="vswr_s11_sweep.png")
-
-    plot_3d_spherical_pattern(N=N_elements, d=d_spacing, beta=beta_phase,
-
-                              taper='uniform', filename="radiation_3d_spherical.png")
+    ensure_data_dir()
+    generate_yagi_theoretical_csv(THEORETICAL_CSV, metrics=ym)
+    plot_yagi_patterns(ym)
+    freqs, Z_sweep = plot_vswr_s11_sweep(design=design)
+    vswr_sweep = np.array([compute_vswr(z, Z0)[1] for z in Z_sweep])
+    band = freqs[vswr_sweep < 2.0]
+    if band.size:
+        print("  VSWR < 2 band       : {:.3f} - {:.3f} GHz".format(band[0] / 1e9, band[-1] / 1e9))
+    else:
+        print("  VSWR < 2 band       : none in 2.0 - 3.0 GHz")
+    plot_polar_pattern(N=N_elements, d=d_spacing, beta=beta_phase)
+    plot_beam_steering(N=N_elements, d=d_spacing)
+    plot_3d_spherical_pattern(N=N_elements, d=d_spacing, beta=beta_phase, taper='uniform')
 
     # Also generate a comparison of all three tapers on one polar plot
-
     _compare_tapers(N_elements, d_spacing, beta_phase)
 
     print("\nAll tasks completed successfully. Output files generated.")

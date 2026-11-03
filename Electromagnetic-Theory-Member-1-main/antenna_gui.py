@@ -9,6 +9,7 @@
 # ==============================================================================
 
 import os
+import sys
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,6 +32,10 @@ def _patched_event_init(self, name, canvas, guiEvent=None):
 _mbb.Event.__init__ = _patched_event_init
 # --------------------------------------------------------------------------
 
+# Shared team config (repo root): data/ file locations
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from emt_config import ROOT_DIR, THEORETICAL_CSV, SIMULATED_CSV, EMPIRICAL_CSV
+
 # Import physics engine functions from FILE 1
 try:
     from antenna_math_engine import (
@@ -41,6 +46,7 @@ try:
         compute_directivity,
         compute_hpbw,
         generate_theoretical_csv,
+        generate_yagi_theoretical_csv,
         get_taper_weights
     )
 except ImportError:
@@ -87,11 +93,15 @@ except ImportError:
         return element_factor(theta) * array_factor(
             theta, N, d, beta, taper=taper, sll_db=sll_db)
 
-    def compute_directivity(N=4, d=None, beta=0.0):
+    def compute_directivity(N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
         return 9.8, 9.55
 
-    def compute_hpbw(N=4, d=None, beta=0.0):
+    def compute_hpbw(N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
         return 26.5, 90.0
+
+    def generate_yagi_theoretical_csv(filename=THEORETICAL_CSV):
+        # Yagi solver needs scipy; keep whatever theory CSV is already in data/
+        print("  [Skip] Yagi theory CSV needs scipy - using existing file")
 
     def generate_theoretical_csv(filename="theoretical_pattern.csv", N=4, d=None, beta=0.0):
         angles = np.arange(0, 360, 10)
@@ -137,8 +147,11 @@ def load_pattern_csv(filepath):
     """
     Reads a pattern CSV in the universal format:
         angle_deg,gain_dBi
+    Relative paths are resolved against the repo root (e.g. data/simulated_pattern.csv).
     Returns (angles_rad, gains_dBi) or (None, None) if file cannot be loaded.
     """
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(ROOT_DIR, filepath)
     if not os.path.exists(filepath):
         return None, None
 
@@ -181,15 +194,14 @@ class AntennaDashboard:
         self.taper = 'uniform'          # 'uniform' | 'chebyshev' | 'binomial'
         self.chebyshev_sll = 30.0       # Dolph-Chebyshev SLL target (dB)
 
-        # CSV file paths
-        self.theory_csv_path = "theoretical_pattern.csv"
-        self.sim_csv_path = "simulated_pattern.csv"
-        self.emp_csv_path = "empirical_pattern.csv"
+        # CSV file paths (shared data/ folder, shown relative to the repo root)
+        self.theory_csv_path = os.path.relpath(THEORETICAL_CSV, ROOT_DIR)
+        self.sim_csv_path = os.path.relpath(SIMULATED_CSV, ROOT_DIR)
+        self.emp_csv_path = os.path.relpath(EMPIRICAL_CSV, ROOT_DIR)
 
-        # Auto-generate theoretical CSV on startup if missing
-        if not os.path.exists(self.theory_csv_path):
-            generate_theoretical_csv(self.theory_csv_path, N=self.N,
-                                     d=self.d_ratio * LAMBDA, beta=0.0)
+        # Auto-generate the Yagi theoretical CSV on startup if missing
+        if not os.path.exists(THEORETICAL_CSV):
+            generate_yagi_theoretical_csv(THEORETICAL_CSV)
 
         # Build figure
         self.fig = plt.figure(figsize=(15, 8.5))
@@ -324,9 +336,9 @@ class AntennaDashboard:
         self.update_main_plot()
 
     def on_update_theory_csv(self, event):
-        d_m = self.d_ratio * LAMBDA
-        b_rad = np.radians(self.beta_deg)
-        generate_theoretical_csv(self.theory_csv_path, N=self.N, d=d_m, beta=b_rad)
+        # The overlay validates the physical Yagi, so regenerate its theory
+        # curve from the latest data/optimized_dimensions.json
+        generate_yagi_theoretical_csv(THEORETICAL_CSV)
         self.on_plot_overlay(None)
 
     # --------------------------------------------------------------------------
@@ -377,8 +389,8 @@ class AntennaDashboard:
             self.ax_main.scatter([rad], [1.0], color='crimson', s=35, zorder=5)
 
         # Metrics
-        D0_dBi, _ = compute_directivity(N=self.N, d=d_m, beta=beta_rad)
-        hpbw, th_max = compute_hpbw(N=self.N, d=d_m, beta=beta_rad)
+        D0_dBi, _ = compute_directivity(N=self.N, d=d_m, beta=beta_rad, taper=self.taper)
+        hpbw, th_max = compute_hpbw(N=self.N, d=d_m, beta=beta_rad, taper=self.taper)
         hpbw_str = "{:.1f} deg".format(hpbw) if hpbw is not None else "N/A"
         null_str = (", ".join(["{:.0f} deg".format(n) for n in self.null_list])
                     if self.null_list else "None")

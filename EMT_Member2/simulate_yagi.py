@@ -21,18 +21,21 @@ not required to regenerate these integration files.
 """
 
 import os
+import sys
 import csv
 import json
 import numpy as np
 
+# Shared team config (repo root): constants + data/ file locations
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from emt_config import (C0 as C, F0, Z0, DIMENSIONS_JSON, SIMULATED_CSV,
+                        ensure_data_dir)
+
 # ============================================================================
 # FROZEN OPTIMIZED DESIGN (from yagi_4el_244GHz.nec + 4nec2 report)
 # ============================================================================
-C = 299_792_458
-F0 = 2.44e9
 LAMBDA_0 = C / F0                 # 0.122866 m
 LAMBDA_MM = LAMBDA_0 * 1000.0     # 122.866 mm
-Z0 = 50.0                         # Reference / feedline impedance (Ohm)
 
 # Element lengths (tip-to-tip, mm) and boom X-positions (mm) — from the .nec
 GEOMETRY = {
@@ -332,8 +335,9 @@ if __name__ == "__main__":
         SIM_METRICS["peak_directivity_dBi"], SIM_METRICS["front_to_back_dB"]))
     print("-" * 68)
 
-    dims_path = os.path.join(script_dir, "optimized_dimensions.json")
-    csv_path = os.path.join(script_dir, "simulated_pattern.csv")
+    ensure_data_dir()
+    dims_path = DIMENSIONS_JSON           # data/ -> read by Lead engine + Member 3
+    csv_path = SIMULATED_CSV              # data/ -> read by Member 1 GUI overlay
     preview_path = os.path.join(script_dir, "simulated_pattern_preview.png")
     smith_path = os.path.join(script_dir, "smith_chart.png")
 
@@ -344,7 +348,7 @@ if __name__ == "__main__":
 
     print("-" * 68)
     print("  Integration outputs ready:")
-    print("    - optimized_dimensions.json  -> consumed by Member 3")
-    print("    - simulated_pattern.csv      -> consumed by Member 1 GUI overlay")
+    print("    - data/optimized_dimensions.json -> consumed by Lead engine + Member 3")
+    print("    - data/simulated_pattern.csv     -> consumed by Member 1 GUI overlay")
     print("    - smith_chart.png            -> Smith chart deliverable (rubric)")
     print("=" * 68)

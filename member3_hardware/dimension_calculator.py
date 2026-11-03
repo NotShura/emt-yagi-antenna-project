@@ -12,18 +12,20 @@ parasitic array from electromagnetic first principles. Generates:
 """
 
 import os
+import sys
 import json
 import numpy as np
+
+# Shared team config (repo root): constants + data/ file locations
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from emt_config import C0 as C, F0, Z0 as Z0_COAX, load_dimensions
 
 # ============================================================================
 # DESIGN FREEZE CONSTANTS (from Master Context Document)
 # ============================================================================
-C = 299_792_458          # Speed of light in vacuum (m/s)
-F0 = 2.44e9              # Center frequency (Hz) — Wi-Fi Channel 7
 LAMBDA_0 = C / F0        # Free-space wavelength (m) ≈ 0.12287 m
 WIRE_GAUGE_AWG = 14      # 14 AWG solid copper wire
 WIRE_DIAMETER_MM = 1.628 # 14 AWG ≈ 1.628 mm diameter
-Z0_COAX = 50.0           # Characteristic impedance of feed coax (Ohms)
 
 # ============================================================================
 # YAGI-UDA ELEMENT DESIGN RULES
@@ -56,18 +58,11 @@ def load_member2_optimized():
     Load Member 2's 4nec2-optimized dimensions if available.
 
     Member 2 (full-wave simulation) is the authoritative source for element
-    lengths and spacings. This looks for the sibling EMT_Member2 folder and
-    returns its optimized_dimensions.json as a dict, or None if not found.
+    lengths and spacings. This reads the shared data/optimized_dimensions.json
+    and returns it as a dict, or None if not found.
     """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.join(
-        script_dir, os.pardir, "EMT_Member2", "optimized_dimensions.json")
-    candidate = os.path.normpath(candidate)
-    if not os.path.exists(candidate):
-        return None
     try:
-        with open(candidate, "r", encoding="ascii") as f:
-            return json.load(f)
+        return load_dimensions()
     except Exception:
         return None
 

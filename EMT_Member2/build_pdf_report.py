@@ -458,4 +458,6 @@ def build_pdf(filename='EMT_Yagi_Antenna_Project_Complete_Report.pdf'):
     print(f'PDF successfully generated: {filename}')
 
 if __name__ == '__main__':
+    # Image paths above are relative to this folder; work from anywhere
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     build_pdf()

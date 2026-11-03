@@ -19,7 +19,10 @@ simulation) and **~15% low-cost hardware** validation.
 | [`Electromagnetic-Theory-Member-1-main/`](Electromagnetic-Theory-Member-1-main/) | **Project Lead + Member 1** | Analytical EM engine (`antenna_math_engine.py`) and interactive beamforming GUI (`antenna_gui.py`) |
 | [`EMT_Member2/`](EMT_Member2/) | **Member 2** | 4nec2 model (`yagi_4el_244GHz.nec`), simulation export (`simulate_yagi.py`), Smith chart, PDF report builder |
 | [`member3_hardware/`](member3_hardware/) | **Member 3** | Cutting-dimension & balun calculators, 3D assembly diagrams, protractor template, assembly guide |
-| `member4_telemetry/` | **Member 4** | *(to be added)* synthetic CSV generator, Friis link-budget, ESP32 RSSI firmware |
+| [`member4_telemetry/`](member4_telemetry/) | **Member 4** | *(placeholder)* synthetic CSV generator, Friis link-budget, ESP32 RSSI firmware |
+| [`data/`](data/) | Shared | **Every file passed between members** (dimensions JSON, pattern CSVs) |
+| [`emt_config.py`](emt_config.py) | Shared | Design constants (f0, λ, Z0) and the locations of the files in `data/` |
+| [`run_pipeline.py`](run_pipeline.py) | Shared | Regenerates everything in the right order |
 | [`docs/`](docs/) | Shared | Project explainer and supporting docs |
 
 ---
@@ -32,34 +35,47 @@ cd emt_project
 pip install -r requirements.txt
 ```
 
-Run any member's deliverable, e.g.:
+Regenerate every member's outputs in dependency order (Member 2 → Member 3 → Lead → PDF):
 
 ```bash
-python EMT_Member2/simulate_yagi.py                 # sim pattern + Smith chart + integration files
-python Electromagnetic-Theory-Member-1-main/antenna_gui.py   # interactive dashboard
-python member3_hardware/dimension_calculator.py     # cutting blueprint
+python run_pipeline.py          # add --gui to open the dashboard at the end
 ```
 
-> Member 2's PDF builder needs `reportlab` (included in `requirements.txt`).
+Or run any single deliverable; scripts work from any folder:
+
+```bash
+python EMT_Member2/simulate_yagi.py                          # dimensions + simulated CSV + Smith chart
+python Electromagnetic-Theory-Member-1-main/antenna_math_engine.py   # theory CSV + all Lead plots
+python Electromagnetic-Theory-Member-1-main/antenna_gui.py   # interactive dashboard
+python member3_hardware/dimension_calculator.py              # cutting blueprint
+```
+
+> Member 2's PDF builder needs `reportlab` (included in `requirements.txt`);
+> the pipeline skips it if it isn't installed.
 
 ---
 
 ## How the members' work connects (data contracts)
 
-Everything integrates through two shared, machine-readable interfaces:
+Everything integrates through the shared [`data/`](data/) folder. Scripts find
+it through `emt_config.py`, so there are no copies to keep in sync:
 
-1. **Universal radiation-pattern CSV** — `angle_deg,gain_dBi`, 36 rows (0°–350° in 10° steps):
-   - `theoretical_pattern.csv` — produced by the Lead's engine (Member 1 folder)
-   - `simulated_pattern.csv` — produced by `EMT_Member2/simulate_yagi.py`
-   - `empirical_pattern.csv` — produced by Member 4 from the RSSI sweep
-   - Member 1's GUI overlays all three on one polar plot.
+```
+EMT_Member2/simulate_yagi.py ──► data/optimized_dimensions.json ──► Lead engine (Yagi solver)
+                                                               └──► member3_hardware (blueprint)
+EMT_Member2/simulate_yagi.py ──► data/simulated_pattern.csv   ──┐
+Lead antenna_math_engine.py  ──► data/theoretical_pattern.csv ──┼──► Member 1 GUI overlay
+Member 4 (RSSI sweep)        ──► data/empirical_pattern.csv   ──┘
+```
 
-2. **Optimized dimensions** — `EMT_Member2/optimized_dimensions.json` is the
-   **single source of truth** for element lengths/spacings. Member 3's
-   `dimension_calculator.py` loads it automatically for the cutting blueprint.
+1. **Universal radiation-pattern CSV** — `angle_deg,gain_dBi`, 36 rows (0°–350° in 10° steps),
+   azimuth cut with **0° = main beam (toward the directors)**, 180° = reflector side.
+2. **Optimized dimensions** — `data/optimized_dimensions.json` is the
+   **single source of truth** for element lengths/spacings. The Lead's Yagi
+   solver and Member 3's blueprint both read it.
 
-If you change a design constant (frequency, element count, spacing), regenerate
-the affected CSV/JSON so the other members stay in sync.
+If you change a design constant, edit it in `emt_config.py`; if you change the
+antenna geometry, re-run `python run_pipeline.py` so every output updates.
 
 ---
 
@@ -86,6 +102,7 @@ Each member works primarily in **their own folder**, so day-to-day changes rarel
 
 ### Ground rules
 - **Only edit your own folder** unless you've agreed otherwise — it avoids merge conflicts.
+- **Read and write shared files only through `emt_config.py` paths** — never copy a CSV/JSON into your own folder.
 - **Pull before you push.** If a push is rejected, run `git pull --rebase`, resolve, then push again.
 - Don't commit `__pycache__/`, virtual envs, or editor files — they're already in `.gitignore`.
 - Generated outputs (PNGs, CSVs, PDF) **are** tracked so the team sees results without re-running.
