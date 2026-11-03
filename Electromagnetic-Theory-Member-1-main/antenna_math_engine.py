@@ -188,6 +188,55 @@ def active_impedance(N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
     return (Z @ I) / I
 
 
+# ---------------- planar array ----------------
+# Nx x Ny grid in the x-y plane, half-wave dipoles parallel to x, broadside = z
+
+def x_dipole_factor(theta, phi):
+    c = np.sin(theta) * np.cos(phi)      # cos of angle from the x axis
+    s = np.sqrt(np.clip(1 - c ** 2, 0, 1))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.abs(np.where(s > 1e-12, np.cos(0.5 * np.pi * c) / s, 0.0))
+
+
+def planar_array_factor(theta, phi, Nx=4, Ny=4, dx=None, dy=None, beta_x=0.0, beta_y=0.0,
+                        taper='uniform', sll_db=30.0):
+    dx = LAMBDA / 2 if dx is None else dx
+    dy = LAMBDA / 2 if dy is None else dy
+    theta, phi = np.asarray(theta, dtype=float), np.asarray(phi, dtype=float)
+
+    def af_1d(N, psi):
+        w = get_taper_weights(N, taper, sll_db)
+        n = np.arange(N).reshape((N,) + (1,) * psi.ndim)
+        return np.abs(np.sum(w.reshape(n.shape) * np.exp(1j * n * psi), axis=0)) / np.sum(w)
+
+    psi_x = K0 * dx * np.sin(theta) * np.cos(phi) + beta_x
+    psi_y = K0 * dy * np.sin(theta) * np.sin(phi) + beta_y
+    return af_1d(Nx, psi_x) * af_1d(Ny, psi_y)
+
+
+def planar_pattern(theta, phi, **kw):
+    return x_dipole_factor(theta, phi) * planar_array_factor(theta, phi, **kw)
+
+
+def planar_steering_phases(theta0_deg, phi0_deg, dx=None, dy=None):
+    # phases that put the main beam at (theta0, phi0)
+    dx = LAMBDA / 2 if dx is None else dx
+    dy = LAMBDA / 2 if dy is None else dy
+    t0, p0 = np.radians(theta0_deg), np.radians(phi0_deg)
+    return -K0 * dx * np.sin(t0) * np.cos(p0), -K0 * dy * np.sin(t0) * np.sin(p0)
+
+
+def planar_directivity(n_theta=361, n_phi=721, **kw):
+    th = np.linspace(0, np.pi, n_theta)
+    ph = np.linspace(0, 2 * np.pi, n_phi)
+    TH, PH = np.meshgrid(th, ph, indexing='ij')
+    U = planar_pattern(TH, PH, **kw) ** 2
+    P = integrate.simpson(integrate.simpson(U * np.sin(TH), x=th, axis=0), x=ph)
+    i, j = np.unravel_index(np.argmax(U), U.shape)
+    D = 4 * np.pi * U[i, j] / P
+    return float(10 * np.log10(D)), float(D), float(np.degrees(th[i])), float(np.degrees(ph[j]))
+
+
 # ---------------- Yagi-Uda ----------------
 # elements along z, boom along x, directors at +x -> beam at phi = 0
 
@@ -475,6 +524,33 @@ def plot_3d_spherical_pattern(N=4, d=None, beta=0.0, taper='uniform',
     print("  [Saved] {}".format(os.path.basename(filename)))
 
 
+def plot_planar_3d(Nx=4, Ny=4, theta0=0.0, phi0=0.0, taper='uniform',
+                   filename=out("planar_array_3d.png")):
+    bx, by = planar_steering_phases(theta0, phi0)
+    th = np.linspace(0, np.pi, 181)
+    ph = np.linspace(0, 2 * np.pi, 361)
+    TH, PH = np.meshgrid(th, ph, indexing='ij')
+    R = planar_pattern(TH, PH, Nx=Nx, Ny=Ny, beta_x=bx, beta_y=by, taper=taper)
+    R = R / R.max()
+    D0, _, tpk, ppk = planar_directivity(Nx=Nx, Ny=Ny, beta_x=bx, beta_y=by, taper=taper)
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(R * np.sin(TH) * np.cos(PH), R * np.sin(TH) * np.sin(PH), R * np.cos(TH),
+                    facecolors=plt.cm.jet(R ** 2), linewidth=0, antialiased=True,
+                    alpha=0.85, rstride=2, cstride=2)
+    ax.set_xlabel('X (dipole axis)')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z (broadside)')
+    ax.set_box_aspect((1, 1, 1))
+    ax.set_title("Planar Array {}x{}, d = 0.5 lambda, steered to theta={:.0f}, phi={:.0f} deg\n"
+                 "D0 = {:.2f} dBi, peak at theta={:.1f}, phi={:.1f} deg"
+                 .format(Nx, Ny, theta0, phi0, D0, tpk, ppk), fontsize=11, pad=12)
+    fig.tight_layout()
+    fig.savefig(filename, dpi=150)
+    plt.close(fig)
+    print("  [Saved] {}".format(os.path.basename(filename)))
+
+
 def compare_tapers(N=4, d=None, beta=0.0, filename=out("taper_comparison.png")):
     d = LAMBDA / 2 if d is None else d
     fig, axes = plt.subplots(1, 3, subplot_kw={"projection": "polar"}, figsize=(15, 5))
@@ -510,6 +586,14 @@ if __name__ == "__main__":
     print("Z11 = {:.2f}, Z12 = {:.2f} Ohm".format(Z[0, 0], Z[0, 1]))
     print("Z_active = " + ", ".join("{:.1f}".format(z) for z in active_impedance(N, d, beta)))
 
+    print("\n-- planar array, d = 0.5 lambda --")
+    for nx, ny in ((4, 4), (8, 8)):
+        print("{}x{} broadside: D0 = {:.2f} dBi".format(nx, ny, planar_directivity(Nx=nx, Ny=ny)[0]))
+    bx, by = planar_steering_phases(30, 45)
+    D0p, _, tpk, ppk = planar_directivity(Nx=4, Ny=4, beta_x=bx, beta_y=by)
+    print("4x4 steered to (30, 45): beta_x = {:.1f}, beta_y = {:.1f} deg, peak at ({:.1f}, {:.1f}), D0 = {:.2f} dBi"
+          .format(np.degrees(bx), np.degrees(by), tpk, ppk, D0p))
+
     print("\n-- Yagi-Uda (induced EMF) --")
     design = load_yagi_design()
     for nm, L, x in zip(design["names"], design["lengths_m"], design["x_m"]):
@@ -534,4 +618,5 @@ if __name__ == "__main__":
     plot_beam_steering(N, d)
     plot_3d_spherical_pattern(N, d, beta)
     compare_tapers(N, d, beta)
+    plot_planar_3d(4, 4, theta0=30, phi0=45)
     print("done")
