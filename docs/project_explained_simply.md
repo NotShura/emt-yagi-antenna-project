@@ -134,7 +134,7 @@ A **pure software** project would lose marks on these. A **pure hardware** proje
 │   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────┐ │
 │   │  PROJECT LEAD    │    │   MEMBER 1       │    │    MEMBER 2         │ │
 │   │  Math Engine     │───▶│   GUI / Plots    │    │    4nec2 / HFSS     │ │
-│   │  (Python/C++)    │    │   (Interactive)  │    │    (Simulation)     │ │
+│   │  (Python)        │    │   (Interactive)  │    │    (Simulation)     │ │
 │   └────────┬────────┘    └────────┬────────┘    └────────┬────────────┘ │
 │            │                      │                       │              │
 │            │   Theoretical CSV    │   Overlay Plot        │  Dimensions  │
@@ -302,7 +302,7 @@ Week 3-4 (Final days):
 |---|------------|--------|-------|
 | 1 | 15-Slide PPT Report | `.pptx` (max 15 slides) | All (Lead submits) |
 | 2 | Demo Video | `.mp4` (max 5 min, < 75 MB) | Member 4 |
-| 3 | Custom CEM Solver Code | Python/C++ | Lead |
+| 3 | Custom CEM Solver Code | Python | Lead |
 | 4 | Interactive GUI | Python (Matplotlib/Plotly/Streamlit) | Member 1 |
 | 5 | 4nec2 / HFSS Simulation Files | `.nec` / `.hfss` | Member 2 |
 | 6 | Hardware Blueprint & Assembly Docs | PDF/Images | Member 3 |

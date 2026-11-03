@@ -21,7 +21,7 @@
 
 ## 2. Selected Project Concept & Strategy
 Because the evaluation rubric explicitly requires slides on *"components, assembly, circuit model, and a prototype demonstration video,"* a 100% pure-software project risks losing marks during final grading. Therefore, we selected a **Software-Heavy Hybrid Project**:
-* **Software Core (85%):** A custom Python/C++ Computational Electromagnetics (CEM) solver and real-time 2D/3D Phased Array Beamforming & Null-Steering GUI, paired with full-wave EM simulation (`4nec2` / `openEMS` / `ANSYS HFSS Student`).
+* **Software Core (85%):** A custom Python Computational Electromagnetics (CEM) solver and real-time 2D/3D Phased Array Beamforming & Null-Steering GUI, paired with full-wave EM simulation (`4nec2` / `openEMS` / `ANSYS HFSS Student`).
 * **Hardware Validation (15%):** A physical 2.4 GHz parasitic Yagi-Uda / dipole array built out of 14 AWG solid copper wire to validate theoretical radiation patterns against empirical Received Signal Strength Indicator (RSSI) polar plots.
 
 ---
@@ -89,7 +89,7 @@ We will proceed through a structured five-phase engineering workflow:
 ### 1. Project Lead: Analytical EM Solver & System Integration
 * **Responsibilities:**
   * Formulate mathematical models for thin-wire radiation integrals, 3D Array Factor ($AF$), and Induced EMF mutual coupling impedance matrices ($Z_{11}, Z_{12}$).
-  * Write the core C++/Python numerical solver to calculate far-field $\mathbf{E}_\theta, \mathbf{H}_\phi$, Poynting vector, exact Directivity ($D_0$), and Half-Power Beamwidth (HPBW).
+  * Write the core Python numerical solver to calculate far-field $\mathbf{E}_\theta, \mathbf{H}_\phi$, Poynting vector, exact Directivity ($D_0$), and Half-Power Beamwidth (HPBW).
   * Oversee milestones, software-hardware integration, and final report submission.
 * **PPT Slides Owned:** Title, Abstract, Working Principle, and Mathematical Formulation.
 
@@ -139,7 +139,7 @@ We will proceed through a structured five-phase engineering workflow:
 To avoid waiting on component purchases, **85% of the project is executed in software first for Rs. 0**:
 
 * **Stage 1: Pure Software & Math (Execute Immediately in Parallel — Rs. 0 Cost)**
-  * **Project Lead** writes the analytical Python/C++ math engine.
+  * **Project Lead** writes the analytical Python math engine.
   * **Member 1** builds the GUI using placeholder functions until the Lead's math module is plugged in.
   * **Member 2** runs the `4nec2` simulation on a laptop to extract $S_{11}$, VSWR, Smith Charts, and the exact millimeter cutting blueprint for Member 3.
   * **Member 4** writes the Friis Link Budget calculator and generates a **synthetic noisy CSV dataset** (theoretical Yagi pattern + $\pm 1.5\text{ dB}$ Gaussian noise) so Member 1's overlay plot works immediately.

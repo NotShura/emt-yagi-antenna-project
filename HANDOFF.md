@@ -2,7 +2,8 @@
 
 **Prepared for:** Project Lead & team
 **As of:** 2026-11-03
-**Contributor:** NotShura (implemented the Lead, Member 1, Member 2, and Member 3 software parts)
+**Project Lead:** mohima31 (Mohi), took over from NotShura
+**Original handover:** NotShura (former lead) implemented the initial Lead, Member 1, Member 2, and Member 3 software parts
 
 This is the current state of the project. The source is in this repo, already
 committed to `main` (git). See [`README.md`](README.md) for structure, setup,
