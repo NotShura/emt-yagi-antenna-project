@@ -207,13 +207,17 @@ def print_cutting_blueprint(dims):
     print("─" * 72)
     print("  ELEMENT CUTTING LENGTHS (tip-to-tip)")
     print("─" * 72)
-    print(f"  {'Element':<20} {'Length (mm)':<15} {'Length (cm)':<15} {'Ratio (×λ)'}")
-    print(f"  {'─'*20} {'─'*15} {'─'*15} {'─'*10}")
-    print(f"  {'Reflector':<20} {dims['reflector_length_mm']:<15.2f} {dims['reflector_length_mm']/10:<15.2f} {REFLECTOR_LENGTH_RATIO:.3f}")
-    print(f"  {'Driven Dipole':<20} {dims['driven_dipole_length_mm']:<15.2f} {dims['driven_dipole_length_mm']/10:<15.2f} {DRIVEN_DIPOLE_RATIO:.3f}")
-    print(f"  {'  (each arm)':<20} {dims['driven_arm_length_mm']:<15.2f} {dims['driven_arm_length_mm']/10:<15.2f} {'—'}")
-    print(f"  {'Director 1':<20} {dims['director_1_length_mm']:<15.2f} {dims['director_1_length_mm']/10:<15.2f} {DIRECTOR_1_LENGTH_RATIO:.3f}")
-    print(f"  {'Director 2':<20} {dims['director_2_length_mm']:<15.2f} {dims['director_2_length_mm']/10:<15.2f} {DIRECTOR_2_LENGTH_RATIO:.3f}")
+    print(f"  {'Element':<20} {'Length (mm)':<15} {'Length (cm)':<15} {'Ratio (L/λ)'}")
+    print(f"  {'─'*20} {'─'*15} {'─'*15} {'─'*11}")
+    # Ratio column = actual length / free-space wavelength (NOT the textbook
+    # starting constants). With Member 2's optimized lengths these will differ
+    # slightly from the nominal 0.482/0.473/0.451/0.442 design ratios.
+    lam_mm = dims['wavelength_mm']
+    print(f"  {'Reflector':<20} {dims['reflector_length_mm']:<15.2f} {dims['reflector_length_mm']/10:<15.2f} {dims['reflector_length_mm']/lam_mm:.3f}")
+    print(f"  {'Driven Dipole':<20} {dims['driven_dipole_length_mm']:<15.2f} {dims['driven_dipole_length_mm']/10:<15.2f} {dims['driven_dipole_length_mm']/lam_mm:.3f}")
+    print(f"  {'  (each arm)':<20} {dims['driven_arm_length_mm']:<15.2f} {dims['driven_arm_length_mm']/10:<15.2f} {dims['driven_arm_length_mm']/lam_mm:.3f}")
+    print(f"  {'Director 1':<20} {dims['director_1_length_mm']:<15.2f} {dims['director_1_length_mm']/10:<15.2f} {dims['director_1_length_mm']/lam_mm:.3f}")
+    print(f"  {'Director 2':<20} {dims['director_2_length_mm']:<15.2f} {dims['director_2_length_mm']/10:<15.2f} {dims['director_2_length_mm']/lam_mm:.3f}")
     print()
     print(f"  Total wire needed: {dims['total_wire_needed_cm']:.1f} cm")
     print(f"  With 20% margin:  {dims['total_wire_with_margin_cm']:.1f} cm")

@@ -13,11 +13,19 @@ artifacts the rest of the team depends on:
      contract consumed by Member 1's GUI overlay (the "Simulation" curve
      plotted against Theory and Empirical).
 
-The azimuth-cut radiation pattern is reconstructed as a calibrated endfire
-Yagi model whose peak gain, front-to-back ratio and beamwidth match the
-4nec2 figures reported in EMT_Yagi_Antenna_Project_Complete_Report.pdf, so
-the CSV stays consistent with the committed report. Running 4nec2 itself is
-not required to regenerate these integration files.
+The azimuth-cut radiation pattern is now COMPUTED from the actual element
+geometry of yagi_4el_244GHz.nec, not fitted. Each angle's gain comes from a
+full-wave-equivalent induced-EMF / method-of-moments solve of the 4-element
+array (the shared antenna_math_engine Yagi solver): the parasitic currents are
+found from the mutual-impedance matrix, then the H-plane (azimuth) directivity
+is integrated from the resulting far field. This is the same physics a NEC/4nec2
+run performs on this geometry; a literal 4nec2 binary is not required.
+
+Convention: azimuth cut, 0..350 deg in 10 deg steps, 0 deg = toward the
+directors (+X endfire main beam), 180 deg = reflector side (back lobe).
+
+If the shared engine (or scipy) cannot be imported, the script falls back to
+the previous calibrated two-lobe endfire model so it still produces a CSV.
 """
 
 import os
@@ -102,17 +110,83 @@ def azimuth_power_pattern(angles_deg):
     return power / np.max(power)
 
 
+def _build_engine_design():
+    """
+    Build the antenna_math_engine Yagi `design` dict straight from the frozen
+    GEOMETRY above (i.e. from yagi_4el_244GHz.nec), so the solver runs on the
+    exact simulated geometry without going through the JSON round-trip.
+
+    x positions are referenced to the driven element (reflector behind at -x,
+    directors forward at +x), matching the engine's load_yagi_design convention.
+    """
+    import numpy as _np
+    names = ("reflector", "driven_dipole", "director_1", "director_2")
+    x_drv = GEOMETRY["driven_dipole"]["x_mm"]
+    return {
+        "names": names,
+        "lengths_m": _np.array([GEOMETRY[n]["length_mm"] for n in names]) / 1000.0,
+        "x_m": _np.array([GEOMETRY[n]["x_mm"] - x_drv for n in names]) / 1000.0,
+        "radius_m": WIRE_RADIUS_MM / 1000.0,
+        "feed_index": 1,                       # driven_dipole
+        "source": "Member 2 geometry (yagi_4el_244GHz.nec)",
+    }
+
+
+def computed_azimuth_pattern_dbi(angles_deg):
+    """
+    Real computed azimuth (H-plane) gain pattern in dBi, or None if the shared
+    engine / scipy is unavailable.
+
+    Solves the 4-element Yagi with the induced-EMF method-of-moments engine and
+    integrates the H-plane directivity. yagi_h_plane uses phi=0 along +X, so
+    0 deg already points at the directors (the main beam) with no re-indexing.
+    Returns ABSOLUTE directivity in dBi (not normalized), i.e. the peak value is
+    whatever the physics yields for this geometry.
+    """
+    try:
+        engine_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "Electromagnetic-Theory-Member-1-main",
+        )
+        if engine_dir not in sys.path:
+            sys.path.insert(0, engine_dir)
+        import antenna_math_engine as ame
+    except Exception as exc:                   # scipy/engine missing -> caller falls back
+        print("  [Info] shared engine unavailable ({}); using calibrated model".format(exc))
+        return None
+
+    try:
+        design = _build_engine_design()
+        sol = ame.solve_yagi(design, freq_hz=F0)
+        p_rad = ame.yagi_radiated_power(sol)
+        d_lin = ame.yagi_h_plane(np.asarray(angles_deg, dtype=float), sol, p_rad)
+        d_lin = np.maximum(d_lin, max(np.max(d_lin) * 1e-4, 1e-12))  # -40 dB floor
+        return 10.0 * np.log10(d_lin)
+    except Exception as exc:
+        print("  [Warn] engine solve failed ({}); using calibrated model".format(exc))
+        return None
+
+
 def generate_simulated_csv(path, angle_step_deg=10):
     """
     Write the universal 36-row (angle_deg, gain_dBi) CSV for Member 1's overlay.
 
-    gain_dBi uses the same power-dB convention as Member 1's theoretical CSV:
-        gain_dBi = peak_directivity_dBi + 10*log10(P_norm)
+    The pattern is COMPUTED from the Yagi geometry via the shared engine
+    (computed_azimuth_pattern_dbi). If that is unavailable, it falls back to the
+    calibrated two-lobe model, using the same power-dB convention as the
+    theoretical CSV: gain_dBi = peak_directivity_dBi + 10*log10(P_norm).
     """
     angles = np.arange(0, 360, angle_step_deg)
-    p_norm = azimuth_power_pattern(angles)
-    p_norm = np.maximum(p_norm, 1e-4)          # floor at -40 dB
-    gain_dBi = SIM_METRICS["peak_directivity_dBi"] + 10.0 * np.log10(p_norm)
+
+    gain_dBi = computed_azimuth_pattern_dbi(angles)
+    if gain_dBi is not None:
+        source = "full-wave-equivalent engine solve"
+    else:
+        p_norm = azimuth_power_pattern(angles)
+        p_norm = np.maximum(p_norm, 1e-4)      # floor at -40 dB
+        gain_dBi = SIM_METRICS["peak_directivity_dBi"] + 10.0 * np.log10(p_norm)
+        source = "calibrated two-lobe model (engine unavailable)"
+    print("  [Pattern] {} ({:.1f} dBi peak)".format(source, float(np.max(gain_dBi))))
 
     with open(path, "w", newline="", encoding="ascii") as f:
         w = csv.writer(f)

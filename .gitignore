@@ -33,3 +33,6 @@ memory/
 # ---- Local experiment scratch (optional) ----
 scratch/
 *.log
+
+# ---- Docs (kept local, not pushed) ----
+docs/

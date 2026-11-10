@@ -42,6 +42,7 @@ try:
         LAMBDA, K0, F0,
         element_factor,
         array_factor,
+        array_pattern_3d,
         total_pattern,
         compute_directivity,
         compute_hpbw,
@@ -86,13 +87,24 @@ except ImportError:
         psi = K0 * d * np.cos(th) + beta
         w = get_taper_weights(N, taper=taper, sll_db=sll_db)
         n_idx = np.arange(N, dtype=float)
-        phase = np.exp(1j * np.outer(n_idx, psi))      # (N, M)
-        AF_complex = np.sum(w[:, None] * phase, axis=0)  # (M,)
+        # np.outer flattens psi, so compute on the ravelled grid and restore shape
+        phase = np.exp(1j * np.outer(n_idx, psi.ravel()))   # (N, M)
+        AF_complex = np.sum(w[:, None] * phase, axis=0)      # (M,)
         w_sum = np.sum(np.abs(w))
-        AF = np.abs(AF_complex) / (w_sum if w_sum > 1e-12 else 1.0)
+        AF = (np.abs(AF_complex) / (w_sum if w_sum > 1e-12 else 1.0)).reshape(th.shape)
         if np.isscalar(theta):
-            return float(AF[0])
+            return float(AF.ravel()[0])
         return AF
+
+    def array_pattern_3d(theta, phi, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
+        # z-directed dipoles spaced along x (same layout as the engine + the Yagi):
+        # the broadside angle from the array axis is gamma, cos(gamma)=sin(th)cos(ph)
+        theta = np.asarray(theta, dtype=float)
+        phi = np.asarray(phi, dtype=float)
+        cos_gamma = np.sin(theta) * np.cos(phi)
+        gamma = np.arccos(np.clip(cos_gamma, -1.0, 1.0))
+        return element_factor(theta) * array_factor(
+            gamma, N, d, beta, taper=taper, sll_db=sll_db)
 
     def total_pattern(theta, N=4, d=None, beta=0.0, taper='uniform', sll_db=30.0):
         return element_factor(theta) * array_factor(
@@ -526,8 +538,13 @@ class AntennaDashboard:
         """
         Redraws the 3D spherical radiation surface for the current N, d, beta,
         taper and active nulls. Uses a coarse mesh so it stays responsive while
-        sliders are dragged. The ULA pattern is phi-independent, so the flat
-        theta pattern (including Schelkunoff nulls) is revolved about the z-axis.
+        sliders are dragged.
+
+        The surface is the TRUE two-angle pattern from the engine's
+        array_pattern_3d(theta, phi): z-directed dipoles spaced along x. This is
+        a real function of both theta and phi (it is NOT phi-independent and is
+        not a revolved 2D cut), so steering in beta tilts the lobe in 3D exactly
+        as it does on the 2D azimuth cut.
         """
         self.ax_3d.cla()
 
@@ -536,18 +553,20 @@ class AntennaDashboard:
         phi_vals = np.linspace(0.0, 2.0 * np.pi, 73)    # azimuth
         THETA, PHI = np.meshgrid(theta_vals, phi_vals)
 
-        E_flat = total_pattern(theta_vals, N=self.N, d=d_m,
-                               beta=beta_rad, taper=self.taper)
+        # Evaluate the engine's genuine 3D array pattern over the (theta, phi) mesh
+        R = array_pattern_3d(THETA, PHI, N=self.N, d=d_m,
+                             beta=beta_rad, taper=self.taper)
 
-        # Apply the same Schelkunoff nulls used on the 2D pattern (phi-independent)
+        # Apply the same Schelkunoff nulls used on the 2D pattern, consistently in
+        # 3D: the nulls live in the array factor, whose argument is the angle gamma
+        # from the array axis (cos gamma = sin(theta) cos(phi)).
         if self.null_list:
-            E_flat = E_flat * compute_schelkunoff_factor(
-                theta_vals, self.null_list, d_m, beta_rad)
+            gamma = np.arccos(np.clip(np.sin(THETA) * np.cos(PHI), -1.0, 1.0))
+            R = R * compute_schelkunoff_factor(gamma, self.null_list, d_m, beta_rad)
 
-        E_max = np.max(E_flat)
-        if E_max > 1e-12:
-            E_flat = E_flat / E_max
-        R = np.tile(E_flat, (phi_vals.size, 1))
+        R_max = np.max(R)
+        if R_max > 1e-12:
+            R = R / R_max
 
         X = R * np.sin(THETA) * np.cos(PHI)
         Y = R * np.sin(THETA) * np.sin(PHI)
@@ -562,9 +581,9 @@ class AntennaDashboard:
         self.ax_3d.set_title(
             "Live 3D Spherical Pattern\nTaper: {}".format(self.taper),
             fontsize=10, pad=8)
-        self.ax_3d.set_xlabel('X', fontsize=8)
+        self.ax_3d.set_xlabel('X (array axis)', fontsize=8)
         self.ax_3d.set_ylabel('Y', fontsize=8)
-        self.ax_3d.set_zlabel('Z (axis)', fontsize=8)
+        self.ax_3d.set_zlabel('Z (dipole axis)', fontsize=8)
         self.ax_3d.tick_params(labelsize=6)
         # Keep the lobe centered and proportional
         try:

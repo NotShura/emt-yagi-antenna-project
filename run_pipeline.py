@@ -8,6 +8,8 @@
 #             balun_calculator.py     -> balun designs
 #             visualize_antenna.py    -> assembly diagrams + protractor
 #   Lead      antenna_math_engine.py  -> data/theoretical_pattern.csv + plots
+#   Member 4  generate_synthetic.py   -> data/empirical_pattern.csv (placeholder)
+#             friis_link_budget.py    -> far-field distance + link budget + error
 #   Member 2  build_pdf_report.py     -> PDF report (skipped if reportlab missing)
 #
 # Usage:
@@ -29,6 +31,8 @@ STEPS = [
     ("Member 3: balun designs", "member3_hardware/balun_calculator.py"),
     ("Member 3: assembly diagrams", "member3_hardware/visualize_antenna.py"),
     ("Lead: analytical EM engine", "Electromagnetic-Theory-Member-1-main/antenna_math_engine.py"),
+    ("Member 4: synthetic telemetry", "member4_telemetry/generate_synthetic.py"),
+    ("Member 4: Friis link budget", "member4_telemetry/friis_link_budget.py"),
     ("Member 2: PDF report", "EMT_Member2/build_pdf_report.py"),
 ]
 GUI = "Electromagnetic-Theory-Member-1-main/antenna_gui.py"

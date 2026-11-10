@@ -9,6 +9,9 @@ simulation) and **~15% low-cost hardware** validation.
 > Full background, rubric, timeline, and task split: see
 > [`emt_project_master_context_handoff_document.md`](emt_project_master_context_handoff_document.md)
 > and the plain-language overview in [`docs/project_explained_simply.md`](docs/project_explained_simply.md).
+>
+> **Building the hardware next?** Start with the beginner-friendly, follow-along
+> guide: [`docs/hardware_next_steps.md`](docs/hardware_next_steps.md).
 
 ---
 
