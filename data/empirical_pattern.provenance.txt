@@ -1,0 +1,22 @@
+empirical_pattern.csv - PROVENANCE
+====================================================
+TYPE : VIRTUAL MEASUREMENT (software turntable sweep).
+       NOT a physical lab measurement. Generated because the
+       hardware prototype was unavailable within the timeline.
+
+Device under test (DUT) : simulated_pattern.csv (Member 2 full-wave MoM)
+Generator  : member4_telemetry/virtual_measurement.py
+Generated  : 2026-11-11 20:54:48
+Seed       : 2440 (reproducible)
+
+Range model impairments applied to the DUT pattern:
+  - thermal/read noise  : sigma = 0.50 dB
+  - multipath ripple    : +/-0.60 dB, 3.5 cycles/360deg
+  - pointing bias       : sigma = 2.0 deg
+  - RSSI quantisation   : 1 dB
+  - receiver floor      : peak -25 dB
+
+Resulting metrics:
+  peak        : 10.00 dBi at 0 deg
+  front/back  : 11.0 dB (0 deg vs 180 deg)
+  RMS vs DUT  : 1.20 dB
