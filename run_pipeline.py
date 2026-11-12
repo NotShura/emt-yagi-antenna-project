@@ -13,10 +13,13 @@
 #                                        hardware-free "measurement" curve)
 #             friis_link_budget.py    -> far-field distance + link budget + error
 #   Member 2  build_pdf_report.py     -> PDF report (skipped if reportlab missing)
+#   Demo      build_studio.py         -> antenna_studio/antenna_studio.html (live
+#                                        3D Yagi designer, built from the CSVs above)
 #
 # Usage:
-#   python run_pipeline.py          # regenerate everything
-#   python run_pipeline.py --gui    # ...then open Member 1's dashboard
+#   python run_pipeline.py            # regenerate everything
+#   python run_pipeline.py --studio   # ...then open the Antenna Studio (demo app)
+#   python run_pipeline.py --gui      # ...then open the matplotlib array dashboard
 # ==============================================================================
 
 import os
@@ -36,8 +39,10 @@ STEPS = [
     ("Member 4: virtual measurement", "member4_telemetry/virtual_measurement.py"),
     ("Member 4: Friis link budget", "member4_telemetry/friis_link_budget.py"),
     ("Member 2: PDF report", "EMT_Member2/build_pdf_report.py"),
+    ("Demo: Antenna Studio build", "antenna_studio/build_studio.py"),
 ]
 GUI = "Electromagnetic-Theory-Member-1-main/antenna_gui.py"
+STUDIO_HTML = os.path.join(ROOT_DIR, "antenna_studio", "antenna_studio.html")
 
 
 def run_step(label, script, env):
@@ -45,8 +50,10 @@ def run_step(label, script, env):
     print("#  " + label + "  (" + script + ")")
     print("#" * 70, flush=True)
     start = time.time()
-    result = subprocess.run([sys.executable, os.path.join(ROOT_DIR, script)],
-                            cwd=ROOT_DIR, env=env)
+    args = [sys.executable, os.path.join(ROOT_DIR, script)]
+    if script.endswith("build_studio.py"):
+        args.append("--no-open")          # opened below only if --studio is given
+    result = subprocess.run(args, cwd=ROOT_DIR, env=env)
     return result.returncode == 0, time.time() - start
 
 
@@ -77,6 +84,11 @@ def main():
 
     if any(status == "FAILED" for _, status, _ in summary):
         sys.exit(1)
+
+    if "--studio" in sys.argv[1:]:
+        import webbrowser
+        webbrowser.open("file:///" + STUDIO_HTML.replace(os.sep, "/"))
+        print("  Opened the Antenna Studio in your browser.")
 
     if "--gui" in sys.argv[1:]:
         subprocess.run([sys.executable, os.path.join(ROOT_DIR, GUI)], cwd=ROOT_DIR)

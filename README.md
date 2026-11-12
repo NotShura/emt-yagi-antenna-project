@@ -15,6 +15,34 @@ simulation) and **~15% low-cost hardware** validation.
 
 ---
 
+## Antenna Studio: the live demo
+
+![Antenna Studio](antenna_studio/studio_preview.png)
+
+A browser app that shows our Yagi in 3D and **solves its physics live** as you
+change the design. Each rod glows with its induced current, the 3D beam
+reshapes, and the polar pattern, gain, front-to-back, beamwidth and VSWR update
+in ~10–20 ms. A **virtual turntable** measures the pattern point by point.
+
+```bash
+python run_pipeline.py --studio      # rebuild everything, then open the Studio
+# or just open antenna_studio/antenna_studio.html (works offline)
+```
+
+The solver in [`antenna_studio/yagi_engine.js`](antenna_studio/yagi_engine.js) is
+a port of the Lead's Python engine (induced-EMF method of moments), and is
+verified against it on six designs to 0.0000 dB:
+
+```bash
+python antenna_studio/make_reference.py
+node   antenna_studio/test_engine.js antenna_studio/py_ref.json   # ALL CHECKS PASSED
+```
+
+What every control does, and a full demo-video script:
+[`docs/video_demo_guide.md`](docs/video_demo_guide.md).
+
+---
+
 ## Repository layout
 
 | Folder | Owner | Contents |
@@ -25,6 +53,7 @@ simulation) and **~15% low-cost hardware** validation.
 | [`member4_telemetry/`](member4_telemetry/) | **Member 4** | *(placeholder)* synthetic CSV generator, Friis link-budget, ESP32 RSSI firmware |
 | [`data/`](data/) | Shared | **Every file passed between members** (dimensions JSON, pattern CSVs) |
 | [`emt_config.py`](emt_config.py) | Shared | Design constants (f0, λ, Z0) and the locations of the files in `data/` |
+| [`antenna_studio/`](antenna_studio/) | Shared (demo) | Live 3D Yagi designer: browser solver, verification test, build script |
 | [`run_pipeline.py`](run_pipeline.py) | Shared | Regenerates everything in the right order |
 | [`docs/`](docs/) | Shared | Project explainer and supporting docs |
 
@@ -41,7 +70,7 @@ pip install -r requirements.txt
 Regenerate every member's outputs in dependency order (Member 2 → Member 3 → Lead → PDF):
 
 ```bash
-python run_pipeline.py          # add --gui to open the dashboard at the end
+python run_pipeline.py          # add --studio to open the live Antenna Studio at the end
 ```
 
 Or run any single deliverable; scripts work from any folder:

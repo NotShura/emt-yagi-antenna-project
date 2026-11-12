@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yagi-Uda Antenna Studio</title>
+<style>
+  :root {
+    --chassis: #1e252d;
+    --panel: #262f39;
+    --panel-2: #2d3743;
+    --line: #3a4654;
+    --ink: #dce3ea;
+    --muted: #8b98a6;
+    --copper: #d08a3c;
+    --copper-hi: #f0b26a;
+    --theory: #4fc3e8;
+    --sim: #e879b9;
+    --meas: #7bd88f;
+    --good: #7bd88f;
+    --warn: #f2c14e;
+    --bad: #f07a6a;
+    --font: "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--chassis); color: var(--ink); font-family: var(--font);
+    font-size: 15px; line-height: 1.45; font-variant-numeric: tabular-nums;
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100vh;
+  }
+  button, input { font-family: inherit; font-size: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--copper-hi); outline-offset: 2px; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+    padding: 14px 22px 12px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  header .solve { margin-left: auto; color: var(--muted); font-size: 13px; }
+  header .solve b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- main ---------- */
+  main {
+    display: grid; gap: 14px; padding: 14px 22px; min-height: 0;
+    grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
+  }
+  .viewport {
+    position: relative; background: radial-gradient(120% 90% at 50% 40%, #2a3440 0%, #1a2027 70%);
+    border: 1px solid var(--line); border-radius: 6px; overflow: hidden; min-height: 420px;
+  }
+  .viewport canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .viewport canvas:active { cursor: grabbing; }
+  .vp-note {
+    position: absolute; left: 14px; bottom: 12px; color: var(--muted); font-size: 13px;
+    pointer-events: none;
+  }
+  .vp-status {
+    position: absolute; left: 14px; top: 12px; font-size: 14px; color: var(--ink);
+    background: rgba(30,37,45,.75); border: 1px solid var(--line); border-radius: 4px;
+    padding: 6px 10px; display: none;
+  }
+  .vp-status.on { display: block; }
+
+  .side { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+  .panel h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+  .panel p.hint { margin: 0 0 6px; color: var(--muted); font-size: 13px; }
+  .polar-panel { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+
+  .polar-wrap { position: relative; flex: 1 1 auto; min-height: 220px; }
+  #polar { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .vp-rods {
+    position: absolute; right: 12px; top: 12px; width: 250px; padding: 9px 11px;
+    background: rgba(30,37,45,.84); border: 1px solid var(--line); border-radius: 6px;
+  }
+  .vp-rods h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+  .vp-rods p { margin: 0 0 6px; color: var(--muted); font-size: 12px; line-height: 1.3; }
+  .vp-rods .rods { gap: 2px; }
+  .vp-rods .rod { grid-template-columns: 64px 1fr 84px; font-size: 12.5px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border-radius: 4px;
+    border: 1px solid var(--line); background: var(--panel-2); font-size: 13px; cursor: pointer;
+  }
+  .chip[aria-pressed="false"] { opacity: .45; }
+  .chip.fixed { cursor: default; }
+  .sw { width: 18px; height: 0; border-top: 2px solid; display: inline-block; }
+  .run-summary { margin: 8px 0 0; font-size: 13px; color: var(--meas); min-height: 2.7em; line-height: 1.35; }
+
+  .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .ro { background: var(--panel-2); border-radius: 4px; padding: 9px 11px; }
+  .ro .k { font-size: 13px; color: var(--muted); }
+  .ro .v { font-size: 30px; font-weight: 600; line-height: 1.1; margin-top: 2px; }
+  .ro .v small { font-size: 15px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .ro .x { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+  .ro .v.good { color: var(--good); } .ro .v.warn { color: var(--warn); } .ro .v.bad { color: var(--bad); }
+
+  .rods { display: grid; gap: 5px; }
+  .rod { display: grid; grid-template-columns: 72px 1fr 92px; gap: 10px; align-items: center; font-size: 13px; }
+  .rod .bar { height: 8px; background: #1b2128; border-radius: 4px; overflow: hidden; }
+  .rod .bar i { display: block; height: 100%; background: linear-gradient(90deg, #8a5a2b, var(--copper-hi)); }
+  .rod .val { color: var(--muted); text-align: right; }
+
+  /* ---------- controls ---------- */
+  footer {
+    display: grid; gap: 14px; padding: 12px 22px 16px; border-top: 1px solid var(--line);
+    grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+    background: #1b2128;
+  }
+  .ctl label { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; }
+  .ctl label output { font-weight: 500; color: var(--copper-hi); }
+  .ctl p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+  input[type=range] { width: 100%; margin: 8px 0 0; accent-color: var(--copper); }
+  input[type=range]:disabled { opacity: .4; }
+  .actions { display: grid; gap: 8px; align-content: start; min-width: 210px; }
+  .btn {
+    padding: 9px 12px; border-radius: 4px; border: 1px solid var(--line); background: var(--panel-2);
+    cursor: pointer; font-size: 14px; text-align: left;
+  }
+  .btn:hover { border-color: var(--copper); }
+  .btn.primary { background: var(--copper); border-color: var(--copper); color: #1b1309; font-weight: 600; }
+  .btn.primary:hover { background: var(--copper-hi); }
+  .toggles { display: flex; gap: 14px; font-size: 13px; color: var(--muted); }
+  .toggles label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+  @media (max-width: 1100px) {
+    body { height: auto; }
+    .polar-wrap { flex: none; aspect-ratio: 1 / 1; }
+    .viewport { min-height: 70vh; }
+    main { grid-template-columns: 1fr; }
+    footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .actions { grid-column: 1 / -1; }
+  }
+  @media (max-width: 560px) {
+    header, main, footer { padding-left: 16px; padding-right: 16px; }
+    footer { grid-template-columns: 1fr; }
+    .readouts { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Yagi-Uda Antenna Studio</h1>
+  <span class="sub">Our 2.44 GHz copper Yagi, solved live in your browser</span>
+  <span class="solve" id="solveInfo">Solving&hellip;</span>
+</header>
+
+<main>
+  <section class="viewport" id="viewport" aria-label="3D view of the antenna and its radiation beam">
+    <div class="vp-status" id="vpStatus" role="status"></div>
+    <div class="vp-rods">
+      <h2>Current on each rod</h2>
+      <p>Only the driven rod is fed. The rest are energised by coupling; their phase lag pushes the beam forward.</p>
+      <div class="rods" id="rods"></div>
+    </div>
+    <div class="vp-note">Drag to rotate the view, scroll to zoom. Rod glow shows the current on each rod.</div>
+  </section>
+
+  <aside class="side">
+    <div class="panel polar-panel">
+      <h2>Radiation pattern, seen from above</h2>
+      <p class="hint">Signal strength in every direction around the antenna. 0&deg; is where the directors point.</p>
+      <div class="polar-wrap"><canvas id="polar" aria-label="Polar radiation pattern"></canvas></div>
+      <div class="legend" id="legend">
+        <span class="chip fixed"><span class="sw" style="border-color:var(--copper-hi)"></span>Live design</span>
+        <button class="chip" data-ref="theory" aria-pressed="true"><span class="sw" style="border-color:var(--theory)"></span>Theory</button>
+        <button class="chip" data-ref="sim" aria-pressed="true"><span class="sw" style="border-color:var(--sim);border-top-style:dashed"></span>Simulation</button>
+        <button class="chip" data-ref="meas" aria-pressed="true"><span class="sw" style="border-color:var(--meas);border-top-style:dotted"></span>Virtual measurement</button>
+      </div>
+      <p class="run-summary" id="runSummary" aria-live="polite"></p>
+    </div>
+
+    <div class="readouts">
+      <div class="ro"><div class="k">Peak gain</div><div class="v" id="roGain">&ndash;</div><div class="x">Strength of the beam vs. an antenna that radiates equally everywhere</div></div>
+      <div class="ro"><div class="k">Front-to-back</div><div class="v" id="roFb">&ndash;</div><div class="x">How much stronger forward is than backward</div></div>
+      <div class="ro"><div class="k">Beamwidth</div><div class="v" id="roBw">&ndash;</div><div class="x">Width of the main beam at half power</div></div>
+      <div class="ro"><div class="k">Feed match (VSWR)</div><div class="v" id="roVswr">&ndash;</div><div class="x" id="roZ">Below 2 means the feed accepts the power</div></div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <div class="ctl">
+    <label for="cFreq">Frequency <output id="oFreq"></output></label>
+    <input type="range" id="cFreq" min="2.2" max="2.7" step="0.005">
+    <p>The signal fed in. Steady across the Wi-Fi band (2.40&ndash;2.48 GHz); far outside it the rods swap roles and the beam breaks up.</p>
+  </div>
+  <div class="ctl">
+    <label for="cDir">Directors <output id="oDir"></output></label>
+    <input type="range" id="cDir" min="0" max="6" step="1">
+    <p>Shorter rods in front. Each one narrows the beam and adds gain, with diminishing returns.</p>
+  </div>
+  <div class="ctl">
+    <label for="cRefl">Reflector length <output id="oRefl"></output></label>
+    <input type="range" id="cRefl" min="50" max="68" step="0.1">
+    <p>The rod behind. Longer than the driven rod (55.6 mm) it works as a mirror; shorter, the back lobe returns.</p>
+  </div>
+  <div class="ctl">
+    <label for="cD1">Director length <output id="oD1"></output></label>
+    <input type="range" id="cD1" min="44" max="60" step="0.1">
+    <p>Each later director is 1.8 mm shorter. Shorter than the driven rod they act as a lens; longer, they turn into mirrors.</p>
+  </div>
+  <div class="ctl">
+    <label for="cSp">Spacing <output id="oSp"></output></label>
+    <input type="range" id="cSp" min="60" max="160" step="1">
+    <p>Stretches or squeezes every gap between rods. Tighter gaps raise front-to-back but spoil the feed match.</p>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="btnMeasure">Run virtual measurement</button>
+    <button class="btn" id="btnReset">Reset to our design</button>
+    <div class="toggles">
+      <label><input type="checkbox" id="tBeam" checked> 3D beam</label>
+      <label><input type="checkbox" id="tAnim"> Animate currents</label>
+    </div>
+  </div>
+</footer>
+
+<script>/*__THREE__*/</script>
+<script>/*__ENGINE__*/</script>
+<script>
+var STUDIO_DATA = /*__DATA__*/null;
+</script>
+<script>
+(function () {
+  "use strict";
+  var E = window.YagiEngine, D = STUDIO_DATA;
+  var DEF = D.defaults;
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ------------------------------------------------------------------ state
+  var state = {
+    freqGHz: DEF.freqGHz, directors: DEF.directors, reflectorMm: DEF.reflectorMm,
+    director1Mm: DEF.director1Mm, spacingPct: 100
+  };
+  var refsOn = { theory: true, sim: true, meas: true };
+  var result = null, dirty = true, sweep = null, lastRun = null;
+
+  function params() {
+    return {
+      reflectorMm: state.reflectorMm, drivenMm: DEF.drivenMm, director1Mm: state.director1Mm,
+      directorTaperMm: DEF.directorTaperMm, directors: state.directors,
+      reflectorGapMm: DEF.reflectorGapMm, directorGapsMm: DEF.directorGapsMm,
+      spacingScale: state.spacingPct / 100, radiusMm: DEF.radiusMm
+    };
+  }
+
+  // ------------------------------------------------------------------ controls
+  var $ = function (id) { return document.getElementById(id); };
+  var ctl = {
+    freq: { el: $("cFreq"), out: $("oFreq"), key: "freqGHz", fmt: function (v) { return v.toFixed(3) + " GHz"; } },
+    dir: { el: $("cDir"), out: $("oDir"), key: "directors", fmt: function (v) { return String(v); }, int: true },
+    refl: { el: $("cRefl"), out: $("oRefl"), key: "reflectorMm", fmt: function (v) { return v.toFixed(1) + " mm"; } },
+    d1: { el: $("cD1"), out: $("oD1"), key: "director1Mm", fmt: function (v) { return v.toFixed(1) + " mm"; } },
+    sp: { el: $("cSp"), out: $("oSp"), key: "spacingPct", fmt: function (v) { return v.toFixed(0) + " %"; } }
+  };
+  function syncControls() {
+    Object.keys(ctl).forEach(function (k) {
+      var c = ctl[k]; c.el.value = state[c.key]; c.out.textContent = c.fmt(state[c.key]);
+    });
+  }
+  Object.keys(ctl).forEach(function (k) {
+    var c = ctl[k];
+    c.el.addEventListener("input", function () {
+      var v = parseFloat(c.el.value); state[c.key] = c.int ? Math.round(v) : v;
+      c.out.textContent = c.fmt(state[c.key]);
+      lastRun = null; $("runSummary").textContent = "";
+      dirty = true;
+    });
+  });
+  $("btnReset").addEventListener("click", function () {
+    state.freqGHz = DEF.freqGHz; state.directors = DEF.directors; state.reflectorMm = DEF.reflectorMm;
+    state.director1Mm = DEF.director1Mm; state.spacingPct = 100;
+    syncControls(); lastRun = null; $("runSummary").textContent = ""; dirty = true;
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".chip[data-ref]"), function (b) {
+    b.addEventListener("click", function () {
+      var k = b.getAttribute("data-ref"); refsOn[k] = !refsOn[k];
+      b.setAttribute("aria-pressed", refsOn[k] ? "true" : "false"); drawPolar();
+    });
+  });
+  $("tBeam").addEventListener("change", function () { if (beamMesh) { beamMesh.visible = this.checked; } });
+  var animOn = false;
+  $("tAnim").checked = false;
+  $("tAnim").addEventListener("change", function () { animOn = this.checked; });
+
+  // ------------------------------------------------------------------ polar plot
+  var polar = $("polar"), pctx = polar.getContext("2d");
+  var PMIN = -25, PMAX = 15;
+  function sizePolar() {
+    var r = polar.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    polar.width = Math.round(r.width * dpr); polar.height = Math.round(r.height * dpr);
+    pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function rOf(db, R) { return Math.max(0, Math.min(1, (db - PMIN) / (PMAX - PMIN))) * R; }
+  function pt(cx, cy, r, deg) {
+    var a = deg * Math.PI / 180; return [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  }
+  function trace(cx, cy, R, angles, dbs, opts) {
+    pctx.save(); pctx.beginPath();
+    for (var i = 0; i <= angles.length; i++) {
+      var j = i % angles.length, p = pt(cx, cy, rOf(dbs[j], R), angles[j]);
+      if (i === 0) { pctx.moveTo(p[0], p[1]); } else { pctx.lineTo(p[0], p[1]); }
+    }
+    if (opts.fill) { pctx.fillStyle = opts.fill; pctx.fill(); }
+    pctx.setLineDash(opts.dash || []); pctx.lineWidth = opts.width || 1.6;
+    pctx.strokeStyle = opts.color; pctx.stroke(); pctx.restore();
+  }
+  function dots(cx, cy, R, angles, dbs, color, rad) {
+    pctx.save(); pctx.fillStyle = color;
+    for (var i = 0; i < angles.length; i++) {
+      var p = pt(cx, cy, rOf(dbs[i], R), angles[i]);
+      pctx.beginPath(); pctx.arc(p[0], p[1], rad, 0, 2 * Math.PI); pctx.fill();
+    }
+    pctx.restore();
+  }
+  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  function drawPolar() {
+    var w = polar.clientWidth, h = polar.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (polar.width !== Math.round(w * dpr) || polar.height !== Math.round(h * dpr)) { sizePolar(); }
+    pctx.save(); pctx.setTransform(1, 0, 0, 1, 0, 0);
+    pctx.clearRect(0, 0, polar.width, polar.height); pctx.restore();
+    var cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 26;
+    // rings
+    pctx.lineWidth = 1; pctx.font = "11px " + css("--font"); pctx.textAlign = "left";
+    for (var db = PMIN + 5; db <= PMAX; db += 5) {
+      var rr = rOf(db, R);
+      pctx.strokeStyle = db === 0 ? "#566476" : "#36414e";
+      pctx.beginPath(); pctx.arc(cx, cy, rr, 0, 2 * Math.PI); pctx.stroke();
+      if (db % 10 === 0) {
+        pctx.fillStyle = "#6f7c8a";
+        var lp = pt(cx, cy, rr, 15); pctx.fillText(db + " dBi", lp[0] + 3, lp[1]);
+      }
+    }
+    // spokes + angle labels
+    pctx.textAlign = "center"; pctx.textBaseline = "middle"; pctx.font = "12px " + css("--font");
+    for (var a = 0; a < 360; a += 30) {
+      var p0 = pt(cx, cy, 0, a), p1 = pt(cx, cy, R, a), pl = pt(cx, cy, R + 14, a);
+      pctx.strokeStyle = "#323c48"; pctx.beginPath(); pctx.moveTo(p0[0], p0[1]); pctx.lineTo(p1[0], p1[1]); pctx.stroke();
+      pctx.fillStyle = a === 0 ? css("--copper-hi") : "#8b98a6"; pctx.fillText(a + "°", pl[0], pl[1]);
+    }
+    // live design first, so the reference curves stay visible on top of it
+    if (result) {
+      var dbs = result.Dh.map(function (d) { return 10 * Math.log10(Math.max(d, 1e-6)); });
+      trace(cx, cy, R, result.angles, dbs, { color: css("--copper-hi"), width: 3, fill: "rgba(208,138,60,0.16)" });
+    }
+    // reference curves for the validated design (fixed, 2.44 GHz)
+    if (refsOn.theory) { trace(cx, cy, R, D.refs.theory.a, D.refs.theory.g, { color: css("--theory"), width: 1.5 }); }
+    if (refsOn.sim) { trace(cx, cy, R, D.refs.sim.a, D.refs.sim.g, { color: css("--sim"), width: 1.5, dash: [6, 4] }); }
+    if (refsOn.meas) { dots(cx, cy, R, D.refs.meas.a, D.refs.meas.g, css("--meas"), 2.6); }
+    // virtual measurement in progress / last run
+    var run = sweep || lastRun;
+    if (run && run.shown > 0) {
+      var ang = run.angles.slice(0, run.shown), val = run.values.slice(0, run.shown);
+      pctx.save(); pctx.strokeStyle = css("--meas"); pctx.globalAlpha = 0.55; pctx.lineWidth = 1;
+      pctx.beginPath();
+      for (var i = 0; i < ang.length; i++) {
+        var q = pt(cx, cy, rOf(val[i], R), ang[i]);
+        if (i === 0) { pctx.moveTo(q[0], q[1]); } else { pctx.lineTo(q[0], q[1]); }
+      }
+      pctx.stroke(); pctx.restore();
+      dots(cx, cy, R, ang, val, "#ffffff", 3.6);
+      dots(cx, cy, R, ang, val, css("--meas"), 2.6);
+      if (sweep) {
+        var cur = ang[ang.length - 1], e = pt(cx, cy, R, cur);
+        pctx.save(); pctx.strokeStyle = css("--meas"); pctx.setLineDash([3, 3]);
+        pctx.beginPath(); pctx.moveTo(cx, cy); pctx.lineTo(e[0], e[1]); pctx.stroke(); pctx.restore();
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ readouts
+  function setRo(id, html, cls) { var el = $(id); el.innerHTML = html; el.className = "v" + (cls ? " " + cls : ""); }
+  function updateReadouts(r) {
+    setRo("roGain", r.gainDbi.toFixed(1) + "<small>dBi</small>");
+    setRo("roFb", r.fbDb.toFixed(1) + "<small>dB</small>", r.fbDb >= 10 ? "good" : (r.fbDb >= 5 ? "warn" : "bad"));
+    setRo("roBw", r.hpbwH === null ? "&ndash;" : r.hpbwH.toFixed(0) + "<small>&deg;</small>");
+    var v = r.vswr, cls = v < 2 ? "good" : (v < 3 ? "warn" : "bad");
+    setRo("roVswr", isFinite(v) ? v.toFixed(2) : "&infin;", cls);
+    $("roZ").textContent = "Input impedance " + r.Zin.re.toFixed(1) + (r.Zin.im >= 0 ? " + j" : " − j") +
+      Math.abs(r.Zin.im).toFixed(1) + " Ω. Below 2 means the feed accepts the power.";
+    var names = rodNames(), html = "", mx = 0;
+    r.currents.forEach(function (c) { mx = Math.max(mx, c.mag); });
+    r.currents.forEach(function (c, i) {
+      var ph = ((c.phaseDeg + 540) % 360) - 180;
+      html += '<div class="rod"><span>' + names[i] + '</span><span class="bar"><i style="width:' +
+        (100 * c.mag / mx).toFixed(1) + '%"></i></span><span class="val">' + c.mag.toFixed(2) +
+        " at " + ph.toFixed(0) + "°</span></div>";
+    });
+    $("rods").innerHTML = html;
+  }
+  function rodNames() {
+    var n = ["Reflector", "Driven"];
+    for (var i = 1; i <= state.directors; i++) { n.push("Director " + i); }
+    return n;
+  }
+
+  // ------------------------------------------------------------------ 3D scene
+  var vp = $("viewport");
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setClearColor(0x000000, 0);     // let the panel's gradient show through
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  vp.insertBefore(renderer.domElement, vp.firstChild);
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(38, 1, 1, 4000);
+  scene.add(new THREE.HemisphereLight(0xdfe8f2, 0x1a1f26, 0.75));
+  var key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(120, 220, 160); scene.add(key);
+  var rim = new THREE.DirectionalLight(0x88aadd, 0.35); rim.position.set(-200, 80, -160); scene.add(rim);
+
+  // turntable floor: degree ring that stays fixed while the antenna turns
+  var FLOOR_Y = -48;
+  (function buildFloor() {
+    var g = new THREE.Group();
+    var ring = new THREE.Mesh(new THREE.RingGeometry(99, 101, 128),
+      new THREE.MeshBasicMaterial({ color: 0x3a4654, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; g.add(ring);
+    var tickPos = [];
+    for (var a = 0; a < 360; a += 10) {
+      var r0 = a % 30 === 0 ? 89 : 94, ar = a * Math.PI / 180;
+      tickPos.push(r0 * Math.cos(ar), 0, -r0 * Math.sin(ar), 101 * Math.cos(ar), 0, -101 * Math.sin(ar));
+    }
+    var tg = new THREE.BufferGeometry(); tg.setAttribute("position", new THREE.Float32BufferAttribute(tickPos, 3));
+    g.add(new THREE.LineSegments(tg, new THREE.LineBasicMaterial({ color: 0x4b5867 })));
+    g.position.y = FLOOR_Y; scene.add(g);
+  })();
+
+  var antenna = new THREE.Group(); scene.add(antenna);
+  var copperBase = new THREE.Color(0x5a3418), copperHot = new THREE.Color(0xff8a2a);
+  var rods = [];
+  var labelCache = {};
+  function makeLabel(text) {
+    if (labelCache[text]) { return labelCache[text].clone(); }
+    var c = document.createElement("canvas"); c.width = 256; c.height = 64;
+    var x = c.getContext("2d"); x.font = "500 30px " + css("--font"); x.fillStyle = "#dce3ea";
+    x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(text, 128, 34);
+    var tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+    var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    s.scale.set(40, 10, 1); labelCache[text] = s; return s.clone();
+  }
+  var rodGroup = new THREE.Group(); antenna.add(rodGroup);
+  var VIS_R = 1.5;   // drawn rod radius in mm (real wire is 0.81 mm; thickened so it reads on screen)
+  // Shared geometry + a pool of rod objects that are moved/scaled, never rebuilt,
+  // so dragging a slider costs almost nothing on the 3D side.
+  var unitCyl = new THREE.CylinderGeometry(VIS_R, VIS_R, 1, 18);
+  var boom = new THREE.Mesh(new THREE.BoxGeometry(1, 5, 5),
+    new THREE.MeshStandardMaterial({ color: 0xcdb98f, roughness: 0.85, metalness: 0.0 }));
+  rodGroup.add(boom);
+  var feedDot = new THREE.Mesh(new THREE.SphereGeometry(1.7, 16, 12), new THREE.MeshBasicMaterial({ color: 0xf0b26a }));
+  rodGroup.add(feedDot);
+  var pool = [];
+  function poolEntry(n) {
+    if (pool[n]) { return pool[n]; }
+    var mat = new THREE.MeshStandardMaterial({ color: 0xb8692c, metalness: 0.75, roughness: 0.38,
+      emissive: copperBase.clone(), emissiveIntensity: 0.4 });
+    var a = new THREE.Mesh(unitCyl, mat), b = new THREE.Mesh(unitCyl, mat);
+    var name = n === 0 ? "Reflector" : (n === 1 ? "Driven" : "D" + (n - 1));
+    var lab = makeLabel(name);
+    rodGroup.add(a); rodGroup.add(b); rodGroup.add(lab);
+    pool[n] = { mat: mat, a: a, b: b, lab: lab, mag: 1, phase: 0, rel: 1 };
+    return pool[n];
+  }
+  function buildRods(design) {
+    var xs = design.x.map(function (v) { return v * 1000; }), Ls = design.lengths.map(function (v) { return v * 1000; });
+    var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+    boom.scale.x = maxX - minX + 30; boom.position.set((minX + maxX) / 2, 0, -VIS_R - 2.6);
+    orbit.goalX = (minX + maxX) / 2 + 15;                 // keep the whole antenna in frame
+    orbit.goalBase = 320 + (maxX - minX - 70.1);
+    rods = [];
+    for (var n = 0; n < Math.max(xs.length, pool.length); n++) {
+      var e = poolEntry(n), on = n < xs.length;
+      e.a.visible = on; e.lab.visible = on; e.b.visible = on && n === design.feed;
+      if (!on) { continue; }
+      if (n === design.feed) {
+        var gap = 1.6, half = (Ls[n] - gap) / 2;
+        e.a.scale.y = half; e.a.position.set(xs[n], gap / 2 + half / 2, 0);
+        e.b.scale.y = half; e.b.position.set(xs[n], -(gap / 2 + half / 2), 0);
+        feedDot.position.set(xs[n], 0, 0);
+      } else {
+        e.a.scale.y = Ls[n]; e.a.position.set(xs[n], 0, 0);
+      }
+      e.lab.position.set(xs[n], Ls[n] / 2 + 9, 0);
+      rods.push(e);
+    }
+  }
+
+  // 3D beam: a fixed (theta, phi) grid whose radius follows the gain in dB
+  var NT = 46, NP = 91, BEAM_R = 92, BEAM_FLOOR_DB = 25;
+  var beamGeo = new THREE.BufferGeometry();
+  var beamPos = new Float32Array(NT * NP * 3), beamCol = new Float32Array(NT * NP * 3);
+  beamGeo.setAttribute("position", new THREE.BufferAttribute(beamPos, 3));
+  beamGeo.setAttribute("color", new THREE.BufferAttribute(beamCol, 3));
+  (function () {
+    var idx = [];
+    for (var i = 0; i < NT - 1; i++) {
+      for (var j = 0; j < NP - 1; j++) {
+        var a = i * NP + j, b = a + 1, c = a + NP, d = c + 1; idx.push(a, c, b, b, c, d);
+      }
+    }
+    beamGeo.setIndex(idx);
+  })();
+  var beamMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.2,
+    side: THREE.DoubleSide, depthWrite: false });
+  var beamMesh = new THREE.Mesh(beamGeo, beamMat);
+  antenna.add(beamMesh);
+  var cLow = new THREE.Color(0x2c5d78), cMid = new THREE.Color(0x4fc3e8), cHigh = new THREE.Color(0xf0b26a);
+  function updateBeam(sol) {
+    var u = E.pattern3d(sol, NT, NP), tmp = new THREE.Color();
+    for (var i = 0; i < NT; i++) {
+      var th = Math.PI * i / (NT - 1), st = Math.sin(th), ct = Math.cos(th);
+      for (var j = 0; j < NP; j++) {
+        var ph = 2 * Math.PI * j / (NP - 1), q = i * NP + j;
+        var db = 10 * Math.log10(Math.max(u[q], 1e-9));
+        var t = Math.max(0, (db + BEAM_FLOOR_DB) / BEAM_FLOOR_DB), r = t * BEAM_R;
+        // physics (x, y, z) -> scene (x, z, y): rods vertical, boom along x
+        beamPos[3 * q] = r * st * Math.cos(ph);
+        beamPos[3 * q + 1] = r * ct;
+        beamPos[3 * q + 2] = r * st * Math.sin(ph);
+        if (t < 0.6) { tmp.copy(cLow).lerp(cMid, t / 0.6); } else { tmp.copy(cMid).lerp(cHigh, (t - 0.6) / 0.4); }
+        beamCol[3 * q] = tmp.r; beamCol[3 * q + 1] = tmp.g; beamCol[3 * q + 2] = tmp.b;
+      }
+    }
+    beamGeo.attributes.position.needsUpdate = true; beamGeo.attributes.color.needsUpdate = true;
+    beamGeo.computeBoundingSphere();
+  }
+
+  // signal source used by the virtual measurement (fixed in the room)
+  var source = new THREE.Group();
+  (function () {
+    var s = new THREE.Mesh(new THREE.SphereGeometry(4.5, 20, 14), new THREE.MeshBasicMaterial({ color: 0x7bd88f }));
+    source.add(s);
+    var lab = makeLabel("Signal source"); lab.position.set(0, 12, 0); source.add(lab);
+    var lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, -120, 0, 0], 3));
+    var line = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0x7bd88f, dashSize: 5, gapSize: 4, transparent: true, opacity: 0.6 }));
+    line.computeLineDistances(); source.add(line);
+    source.position.set(128, 0, 0); source.visible = false; scene.add(source);
+  })();
+
+  // ------------------------------------------------------------------ camera orbit
+  // camera on the +z side so the beam (+x) points to the right of the screen,
+  // toward the signal source, like the "signal shoots this way" diagrams
+  // goalX / goalBase follow the antenna's length so a longer Yagi stays framed;
+  // zoom is the user's own scroll setting and is kept across design changes.
+  var orbit = { az: 1.08, el: 0.36, dist: 320, zoom: 1, goalX: 26, goalBase: 320,
+    target: new THREE.Vector3(26, -12, 0) };
+  function placeCamera() {
+    var c = Math.cos(orbit.el);
+    camera.position.set(orbit.target.x + orbit.dist * c * Math.cos(orbit.az),
+      orbit.target.y + orbit.dist * Math.sin(orbit.el),
+      orbit.target.z + orbit.dist * c * Math.sin(orbit.az));
+    camera.lookAt(orbit.target);
+  }
+  (function () {
+    var el = renderer.domElement, drag = null;
+    el.addEventListener("pointerdown", function (e) { drag = { x: e.clientX, y: e.clientY }; el.setPointerCapture(e.pointerId); });
+    el.addEventListener("pointermove", function (e) {
+      if (!drag) { return; }
+      orbit.az += (e.clientX - drag.x) * 0.008;
+      orbit.el = Math.max(-0.2, Math.min(1.35, orbit.el + (e.clientY - drag.y) * 0.006));
+      drag = { x: e.clientX, y: e.clientY }; placeCamera();
+    });
+    el.addEventListener("pointerup", function () { drag = null; });
+    el.addEventListener("wheel", function (e) {
+      e.preventDefault(); orbit.zoom = Math.max(0.5, Math.min(2.2, orbit.zoom * (1 + Math.sign(e.deltaY) * 0.08)));
+    }, { passive: false });
+  })();
+  function resize() {
+    var r = vp.getBoundingClientRect();
+    renderer.setSize(r.width, r.height, false);
+    renderer.domElement.style.width = r.width + "px"; renderer.domElement.style.height = r.height + "px";
+    camera.aspect = r.width / Math.max(r.height, 1); camera.updateProjectionMatrix();
+    sizePolar(); drawPolar();
+  }
+  window.addEventListener("resize", resize);
+
+  // ------------------------------------------------------------------ physics update
+  function recompute() {
+    var t0 = performance.now();
+    var design = E.buildDesign(params());
+    result = E.analyse(design, state.freqGHz * 1e9, { step: 1, nTheta: 91, nPhiHalf: 91 });
+    buildRods(design);
+    result.currents.forEach(function (c, i) { rods[i].mag = c.mag; rods[i].phase = c.phaseDeg * Math.PI / 180; });
+    var mx = Math.max.apply(null, result.currents.map(function (c) { return c.mag; }));
+    rods.forEach(function (r) { r.rel = r.mag / mx; });
+    updateBeam(result.sol);
+    var ms = performance.now() - t0;
+    $("solveInfo").innerHTML = "Solved " + design.lengths.length + " rods in <b>" + ms.toFixed(1) + " ms</b>";
+    updateReadouts(result); drawPolar();
+  }
+
+  // ------------------------------------------------------------------ virtual measurement
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function gauss(rnd) { var u = 1 - rnd(), v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function planSweep() {
+    // same range model as member4_telemetry/virtual_measurement.py
+    var rnd = mulberry32(2440), angles = [], values = [];
+    var bias = 2.0 * gauss(rnd), phase = rnd() * 2 * Math.PI;
+    var n = result.Dh.length, step = result.step;
+    for (var a = 0; a < 360; a += 10) {
+      var pos = (((a + bias) % 360) + 360) % 360 / step, i0 = Math.floor(pos) % n, fr = pos - Math.floor(pos);
+      var d = result.Dh[i0] * (1 - fr) + result.Dh[(i0 + 1) % n] * fr;
+      var db = 10 * Math.log10(Math.max(d, 1e-9)) + 0.6 * Math.sin(3.5 * a * Math.PI / 180 + phase) + 0.5 * gauss(rnd);
+      angles.push(a); values.push(Math.round(db));
+    }
+    var peak = Math.max.apply(null, values);
+    values = values.map(function (v) { return Math.max(v, peak - 25); });
+    return { angles: angles, values: values, shown: 0, next: 0 };
+  }
+  function setControlsDisabled(dis) {
+    Object.keys(ctl).forEach(function (k) { ctl[k].el.disabled = dis; });
+    $("btnReset").disabled = dis;
+  }
+  function finishSweep() {
+    var s = sweep, model = s.angles.map(function (a) {
+      return 10 * Math.log10(Math.max(result.Dh[Math.round(a / result.step) % result.Dh.length], 1e-9));
+    });
+    var rms = Math.sqrt(s.values.reduce(function (acc, v, i) { return acc + (v - model[i]) * (v - model[i]); }, 0) / s.values.length);
+    var fb = s.values[0] - s.values[18];
+    lastRun = { angles: s.angles, values: s.values, shown: s.angles.length };
+    sweep = null; antenna.rotation.y = 0; source.visible = false;
+    setControlsDisabled(false);
+    $("btnMeasure").textContent = "Run virtual measurement";
+    $("vpStatus").className = "vp-status";
+    $("runSummary").textContent = "Measured front-to-back " + fb.toFixed(0) + " dB, " + rms.toFixed(1) +
+      " dB RMS from the live model across 36 angles. Simulated measurement, not lab data.";
+    drawPolar();
+  }
+  $("btnMeasure").addEventListener("click", function () {
+    if (sweep) { sweep = null; antenna.rotation.y = 0; source.visible = false; setControlsDisabled(false);
+      this.textContent = "Run virtual measurement"; $("vpStatus").className = "vp-status"; drawPolar(); return; }
+    if (dirty) { recompute(); dirty = false; }
+    sweep = planSweep(); sweep.t = performance.now(); lastRun = null; $("runSummary").textContent = "";
+    source.visible = true; setControlsDisabled(true); this.textContent = "Stop measurement";
+    $("vpStatus").className = "vp-status on";
+  });
+  var STEP_MS = reduceMotion ? 90 : 230;
+
+  // ------------------------------------------------------------------ loop
+  var clock = 0;
+  function frame(now) {
+    if (dirty) { recompute(); dirty = false; }
+    if (sweep && now - sweep.t >= STEP_MS) {
+      sweep.t = now;
+      if (sweep.shown < sweep.angles.length) {
+        var a = sweep.angles[sweep.shown];
+        antenna.rotation.y = a * Math.PI / 180;   // turn the antenna; the source stays put
+        sweep.shown++;
+        $("vpStatus").textContent = "Virtual turntable at " + a + "°, reading " + sweep.values[sweep.shown - 1] + " dBi";
+        drawPolar();
+      } else { finishSweep(); }
+    }
+    clock = now / 1000;
+    var goalDist = orbit.goalBase * orbit.zoom;
+    if (Math.abs(orbit.target.x - orbit.goalX) > 0.05 || Math.abs(orbit.dist - goalDist) > 0.05) {
+      var ease = reduceMotion ? 1 : 0.15;                 // glide, don't jump
+      orbit.target.x += (orbit.goalX - orbit.target.x) * ease;
+      orbit.dist += (goalDist - orbit.dist) * ease;
+      placeCamera();
+    }
+    rods.forEach(function (r) {
+      // current |I| cos(wt + phase): a rod whose current lags (negative phase)
+      // peaks later, so the glow ripples driven -> D1 -> D2, i.e. forward
+      var glow = animOn && !reduceMotion ? r.rel * (0.5 + 0.5 * Math.cos(2 * Math.PI * 0.7 * clock + r.phase)) : r.rel;
+      r.mat.emissive.copy(copperBase).lerp(copperHot, glow);
+      r.mat.emissiveIntensity = 0.1 + 0.6 * glow;
+    });
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  syncControls(); placeCamera();
+  if (window.ResizeObserver) {
+    new ResizeObserver(resize).observe(vp);
+    new ResizeObserver(function () { sizePolar(); drawPolar(); }).observe(polar.parentNode);
+  }
+  resize(); requestAnimationFrame(frame);
+  window.__studio = { state: state, getResult: function () { return result; }, recompute: recompute };
+})();
+</script>
+</body>
+</html>

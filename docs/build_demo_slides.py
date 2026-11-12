@@ -1,14 +1,13 @@
 """
 build_demo_slides.py
 ====================
-Builds ONE self-contained slideshow (docs/demo_slides.html) holding every image
-the demo video needs, in the exact order the video uses them, plus a title
-slide, "switch to terminal / live GUI" cue slides, and a closing slide.
+Builds ONE self-contained slideshow (docs/demo_slides.html) for the demo video:
+the title card, the "switch to the Studio / terminal" cue cards, the closing
+card, and backup stills for when the live Antenna Studio can't run.
 
-Why: during recording you just press the Right arrow / Spacebar to move to the
-next visual instead of hunting for PNG files. The images are embedded (base64),
-so the file works offline, can be moved or shared, and never breaks from a bad
-path.
+Why: during recording you just press the Right arrow / Spacebar instead of
+hunting for files. The images are embedded (base64), so the file works offline,
+can be moved or shared, and never breaks from a bad path.
 
 Run it from the repo root:
     python docs/build_demo_slides.py
@@ -28,75 +27,68 @@ OUT = os.path.join(ROOT, "docs", "demo_slides.html")
 
 # ----------------------------------------------------------------------------
 # Slide deck definition — order matches docs/video_demo_guide.md
+# The video is now driven by the live Antenna Studio; this deck only carries
+# the title, the two "switch now" cue cards, the closing card, and BACKUP
+# stills to use if the live app can't run on the recording machine.
 # Each slide is a dict:
-#   kind : "title" | "cue" | "image" | "closing"
+#   kind : "title" | "cue" | "image" | "closing" | "divider"
 #   For image slides: scene, title, caption, img (path relative to repo root)
 # ----------------------------------------------------------------------------
+BACKUP = "Backup &mdash; use only if the live Studio can't run"
 SLIDES = [
     {"kind": "title",
      "title": "2.44 GHz Yagi-Uda Antenna",
-     "subtitle": "Design &middot; Simulation &middot; Validation",
-     "foot": "A directional Wi-Fi antenna, proven three independent ways"},
-
-    {"kind": "image", "scene": "Scene 2 &mdash; The Digital Antenna (CAD)",
-     "title": "The antenna as a 3D model",
-     "caption": "Four copper rods: one reflector (back), the driven element, and two directors (front).",
-     "img": "EMT_Member2/yagi_3d_structure.png"},
-
-    {"kind": "image", "scene": "Scene 2 &mdash; The Digital Antenna (CAD)",
-     "title": "Labeled assembly &amp; exact dimensions",
-     "caption": "The same geometry with each rod's length and spacing &mdash; the numbers every calculation runs on.",
-     "img": "member3_hardware/output/antenna_3d_assembly.png"},
+     "subtitle": "Modelled in 3D, solved live, measured and validated",
+     "foot": "A directional Wi-Fi antenna made from four copper rods"},
 
     {"kind": "cue",
-     "title": "Switch to the TERMINAL",
-     "cmd": "python run_pipeline.py",
-     "caption": "Scene 3 &mdash; run the whole project; wait for every step to say &ldquo;ok&rdquo;."},
-
-    {"kind": "image", "scene": "Scene 4 &mdash; Theory (our own physics engine)",
-     "title": "Method 1: Theory predicts a forward beam",
-     "caption": "Computed from first principles by our own electromagnetics code. Big lobe forward (0&deg;), almost nothing backward.",
-     "img": "Electromagnetic-Theory-Member-1-main/radiation_pattern_polar.png"},
-
-    {"kind": "image", "scene": "Scene 4 &mdash; Theory (our own physics engine)",
-     "title": "The same pattern in 3D",
-     "caption": "The predicted radiation pattern as a 3D shape &mdash; a beam pointing one way.",
-     "img": "Electromagnetic-Theory-Member-1-main/radiation_3d_spherical.png"},
-
-    {"kind": "image", "scene": "Scene 5 &mdash; Full-Wave Simulation",
-     "title": "Method 2: An independent simulation agrees",
-     "caption": "Different maths from our theory engine &mdash; same forward beam, same suppressed back lobe.",
-     "img": "EMT_Member2/simulated_pattern_preview.png"},
-
-    {"kind": "image", "scene": "Scene 5 &mdash; Full-Wave Simulation",
-     "title": "Electrically well matched at 2.44 GHz",
-     "caption": "Smith chart: very low reflection at the design frequency &mdash; the antenna is efficient, not just directional.",
-     "img": "EMT_Member2/smith_chart.png"},
-
-    {"kind": "image", "scene": "Scene 6 &mdash; Virtual Measurement (simulated)",
-     "title": "Method 3: A virtual turntable sweep",
-     "caption": "We &ldquo;measure&rdquo; the simulated antenna in software, adding realistic noise &amp; ripple. Clearly labelled SIMULATED, not a lab reading.",
-     "img": "member4_telemetry/output/virtual_measurement_preview.png"},
+     "title": "Switch to the Antenna Studio",
+     "cmd": "python run_pipeline.py --studio\n(or double-click antenna_studio/antenna_studio.html)",
+     "caption": "Scenes 2&ndash;6 happen live in the Studio: the 3D antenna, the experiments and the virtual measurement. Come back here for Scene 7."},
 
     {"kind": "cue",
-     "title": "Switch to the LIVE DASHBOARD",
-     "cmd": "python Electromagnetic-Theory-Member-1-main/antenna_gui.py",
-     "caption": "Scene 7 &mdash; click &ldquo;Plot Overlay&rdquo;; drag a slider to show it updates live."},
-
-    {"kind": "image", "scene": "Scene 7 &mdash; The Validation Overlay",
-     "title": "All three methods, one answer",
-     "caption": "Theory, Simulation and Virtual Measurement lie almost on top of each other. (Backup still image &mdash; prefer showing this live in the dashboard.)",
-     "img": "Electromagnetic-Theory-Member-1-main/yagi_theory_vs_sim.png"},
-
-    {"kind": "image", "scene": "Scene 8 &mdash; Verification Numbers",
-     "title": "The agreement, quantified",
-     "caption": "About 1 dB average error vs theory, and roughly 11 dB stronger forward than backward. Small error, strong beam.",
-     "img": "member4_telemetry/output/friis_link_budget.png"},
+     "title": "Switch to the terminal",
+     "cmd": "python run_pipeline.py\nnode antenna_studio/test_engine.js antenna_studio/py_ref.json",
+     "caption": "Scene 7: everything rebuilds with one command, and the live app is checked against our Python engine (ALL CHECKS PASSED)."},
 
     {"kind": "closing",
-     "title": "Designed &rarr; Simulated &rarr; Measured &rarr; Validated",
-     "subtitle": "Three independent methods. One result.",
+     "title": "Modelled &rarr; Solved live &rarr; Measured &rarr; Validated",
+     "subtitle": "Theory, an independent simulation and the measurement agree.",
      "foot": "Thanks for watching"},
+
+    {"kind": "divider",
+     "title": "Backup slides",
+     "subtitle": "Only for the case where the live Studio can&rsquo;t run on the recording machine."},
+
+    {"kind": "image", "scene": BACKUP,
+     "title": "The Antenna Studio",
+     "caption": "Live 3D antenna with its beam, rod currents, polar pattern, readouts and the five design controls.",
+     "img": "antenna_studio/studio_preview.png"},
+
+    {"kind": "image", "scene": BACKUP,
+     "title": "The antenna as a 3D model",
+     "caption": "Four copper rods: reflector (back), driven element, and two directors (front), with exact dimensions.",
+     "img": "member3_hardware/output/antenna_3d_assembly.png"},
+
+    {"kind": "image", "scene": BACKUP,
+     "title": "Theory: a forward beam",
+     "caption": "Our own physics engine's prediction: a big lobe at 0&deg;, little leaking backward.",
+     "img": "Electromagnetic-Theory-Member-1-main/radiation_pattern_polar.png"},
+
+    {"kind": "image", "scene": BACKUP,
+     "title": "Independent simulation: well matched",
+     "caption": "Smith chart from the full-wave simulation: low reflection at 2.44 GHz.",
+     "img": "EMT_Member2/smith_chart.png"},
+
+    {"kind": "image", "scene": BACKUP,
+     "title": "Virtual measurement (simulated)",
+     "caption": "A software turntable sweep of the simulated antenna, with realistic noise. Not lab data.",
+     "img": "member4_telemetry/output/virtual_measurement_preview.png"},
+
+    {"kind": "image", "scene": BACKUP,
+     "title": "Theory vs simulation",
+     "caption": "The two independent methods give the same pattern.",
+     "img": "Electromagnetic-Theory-Member-1-main/yagi_theory_vs_sim.png"},
 ]
 
 
@@ -139,6 +131,16 @@ def render_slide(i, s):
             '</div></section>'
         ).format(i=i, c=counter, t=s["title"],
                  cmd=html.escape(s["cmd"]), cap=s["caption"])
+
+    if s["kind"] == "divider":
+        return (
+            '<section class="slide closing" data-i="{i}">'
+            '{c}'
+            '<div class="wrap">'
+            '<h2>{t}</h2>'
+            '<div class="foot">{sub}</div>'
+            '</div></section>'
+        ).format(i=i, c=counter, t=s["title"], sub=s["subtitle"])
 
     if s["kind"] == "closing":
         return (

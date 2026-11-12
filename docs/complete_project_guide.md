@@ -221,13 +221,20 @@ different methods, one answer → the design is validated.
 From the project's main folder:
 
 ```bash
-# Regenerate everything and open the interactive dashboard:
-python run_pipeline.py --gui
+# Regenerate everything and open the Antenna Studio (the live demo app):
+python run_pipeline.py --studio
 ```
 
-In the dashboard, click **"Plot Overlay"** and you'll see three curves on one
-circular graph, all with a big lobe at 0° and a dent at 180°. That's a working,
-validated directional antenna.
+The **Antenna Studio** opens in your browser. It shows our antenna in 3D with its
+beam around it, and solves the physics live as you move five sliders (frequency,
+number of directors, reflector length, director length, spacing). On its polar
+plot the live curve sits right on top of the theory, simulation and measurement
+curves, which means it's a working, validated directional antenna. Press **Run virtual
+measurement** to watch it being measured on a virtual turntable.
+
+Next time you can skip the pipeline and just double-click
+`antenna_studio/antenna_studio.html` (it works offline). Every part of the Studio
+screen is explained in [`video_demo_guide.md`](video_demo_guide.md), Section 2.
 
 To re-run just the virtual measurement:
 ```bash
@@ -290,7 +297,10 @@ python member4_telemetry/virtual_measurement.py
 | How to physically build & measure it | `docs/hardware_next_steps.md` |
 | The software-only fallback + honesty rules | `docs/software_only_plan.md` |
 | Run everything with one command | `run_pipeline.py` |
-| The interactive dashboard | `Electromagnetic-Theory-Member-1-main/antenna_gui.py` |
+| **The live demo app (3D antenna, live solver)** | `antenna_studio/antenna_studio.html` |
+| How to film the demo + what every control means | `docs/video_demo_guide.md` |
+| Proof the live app matches our Python engine | `node antenna_studio/test_engine.js antenna_studio/py_ref.json` |
+| The older array dashboard (not used in the video) | `Electromagnetic-Theory-Member-1-main/antenna_gui.py` |
 | The antenna "CAD" geometry | `EMT_Member2/yagi_4el_244GHz.nec` |
 
 ---
