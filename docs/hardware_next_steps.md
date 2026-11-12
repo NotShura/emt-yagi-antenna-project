@@ -269,9 +269,8 @@ signal strength (a negative number like `-46 dBm`) off a free **Wi-Fi Analyzer**
 app on the measuring phone and type it in.
 
 When it finishes, it saves your real measurements to `data/empirical_pattern.csv`.
-That one file is the bridge back to the software — **it automatically replaces the
-virtual (simulated) measurement everyone's been using.** It also stamps the file
-as a *physical* measurement, so:
+That one file is the bridge back to the software — **it takes the place of the
+simulated measurement.** It also stamps the file as a *physical* measurement, so:
 
 - re-running `run_pipeline.py` later **won't overwrite your real data** (the
   virtual-measurement step sees the stamp and skips itself), and
@@ -292,8 +291,8 @@ python member4_telemetry/friis_link_budget.py
 python antenna_studio/build_studio.py
 ```
 
-The **Antenna Studio** opens in your browser. On its polar plot ("Radiation
-pattern, seen from above") your data appears as **green dots labelled "Measured
+The **Antenna Studio** opens in your browser. On its **Radiation pattern** plot
+your data appears as **green dots labelled "Measured
 (phone sweep)"**, on top of the copper live curve, the cyan theory and the pink
 simulation. If your green dots make a **big lobe near 0°** and a **dent near
 180°**, congratulations — you built a working directional antenna and it agrees

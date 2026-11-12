@@ -104,14 +104,15 @@ A Python program that computes, from pure equations, how the antenna *should*
 radiate. This is the **"ground truth from theory."** No shortcuts, no downloaded
 tools — we wrote the electromagnetics ourselves.
 
-### 4.2 The interactive apps (Member 1 + the Antenna Studio)
-Member 1 built a matplotlib dashboard for exploring antenna *arrays* with sliders.
-For the demo we built the **Antenna Studio**: a browser app focused on *our* Yagi.
-It shows the antenna in 3D (you can spin it), each rod glowing with its current,
-and the beam around it. It re-solves the physics live as you move five sliders, in
-about 10–20 milliseconds. Its polar plot overlays everyone's results on one graph.
-This is the "wow" of the demo. (Its solver is a port of the Lead's engine, checked
-to match it exactly.)
+### 4.2 The interactive apps (Member 1)
+- **Antenna Studio**: a browser app built around the Yagi. It shows the antenna
+  in 3D (you can spin it), each rod glowing with its current, and the beam around
+  it. It re-solves the physics live as you move five controls, in about
+  10–20 milliseconds, and its polar plot overlays everyone's results on one graph.
+  This is the centrepiece of the demo. Its solver is a port of the Lead's engine,
+  checked to match it exactly.
+- **Array dashboard**: a matplotlib tool for exploring general antenna *arrays*
+  (number of elements, spacing, phase steering, tapers, nulls).
 
 ### 4.3 The professional simulation (Member 2)
 We describe the exact antenna geometry in a standard simulation format (a `.nec`
@@ -177,9 +178,8 @@ and the project supports both:
 
 Full build details live in [`hardware_next_steps.md`](hardware_next_steps.md).
 
-### Path B — Virtual measurement (the software method) ← what we did now
-If the parts can't be bought or arrive in time, we **measure the antenna inside the
-computer instead.** We take the simulated antenna and run it through a software
+### Path B — Virtual measurement (the software method)
+Without hardware, we **measure the antenna inside the computer.** We take the simulated antenna and run it through a software
 model of a real measurement setup — adding the little imperfections a real sweep
 has (noise, small reflections, pointing wobble, rounded readings). The result looks
 and behaves just like a real measured curve.
@@ -191,22 +191,21 @@ Details and the honesty rules are in [`software_only_plan.md`](software_only_pla
 
 ---
 
-## Part 7 — What we did in this round (the software-only build)
+## Part 7 — The complete software version
 
-Because the hardware might not arrive in time, we **implemented the full software
-version end-to-end** so the project is complete and demo-ready right now:
+The project runs end-to-end in software, with no hardware required:
 
-1. Confirmed the **CAD geometry** and **full-wave simulation** already work.
-2. Built a new **"virtual measurement"** program — a software turntable sweep of
-   the simulated antenna (`member4_telemetry/virtual_measurement.py`).
-3. Wired it into the one-command pipeline (`run_pipeline.py`).
-4. Labelled it honestly everywhere as a *simulated* measurement, with a
-   provenance stamp. A later real phone sweep gets stamped *physical*, is never
-   overwritten by the pipeline, and is labelled "Measured".
-5. Built the **Antenna Studio** (`antenna_studio/`): the live 3D antenna you can
-   redesign, with a live virtual turntable measurement. Its solver was checked
-   against our Python engine on six designs and matches to 0.0000 dB.
-6. Ran the whole thing and checked all three curves agree.
+1. The **CAD geometry** (`.nec` file) and the **full-wave simulation** define and
+   analyse the antenna.
+2. A **virtual measurement** program performs a software turntable sweep of the
+   simulated antenna (`member4_telemetry/virtual_measurement.py`).
+3. Everything regenerates with one command (`run_pipeline.py`).
+4. The measurement is labelled as *simulated* everywhere, backed by a provenance
+   stamp. A real phone sweep is stamped *physical*, is never overwritten by the
+   pipeline, and is labelled "Measured".
+5. The **Antenna Studio** (`antenna_studio/`) shows the antenna live in 3D, lets
+   you redesign it, and runs a live virtual turntable measurement. Its solver is
+   checked against the Python engine on six designs and matches to 0.0000 dB.
 
 ### The result (the payoff)
 
@@ -308,7 +307,7 @@ python member4_telemetry/virtual_measurement.py
 | **The live demo app (3D antenna, live solver)** | `antenna_studio/antenna_studio.html` |
 | How to film the demo + what every control means | `docs/video_demo_guide.md` |
 | Proof the live app matches our Python engine | `node antenna_studio/test_engine.js antenna_studio/py_ref.json` |
-| The older array dashboard (not used in the video) | `Electromagnetic-Theory-Member-1-main/antenna_gui.py` |
+| The array dashboard (general phased arrays) | `Electromagnetic-Theory-Member-1-main/antenna_gui.py` |
 | The antenna "CAD" geometry | `EMT_Member2/yagi_4el_244GHz.nec` |
 
 ---

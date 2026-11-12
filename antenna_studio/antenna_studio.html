@@ -145,7 +145,6 @@
 <body>
 <header>
   <h1>Yagi-Uda Antenna Studio</h1>
-  <span class="sub">Our 2.44 GHz copper Yagi, solved live in your browser</span>
   <span class="solve" id="solveInfo">Solving&hellip;</span>
 </header>
 
@@ -153,17 +152,16 @@
   <section class="viewport" id="viewport" aria-label="3D view of the antenna and its radiation beam">
     <div class="vp-status" id="vpStatus" role="status"></div>
     <div class="vp-rods">
-      <h2>Current on each rod</h2>
-      <p>Only the driven rod is fed. The rest are energised by coupling; their phase lag pushes the beam forward.</p>
+      <h2>Rod currents</h2>
       <div class="rods" id="rods"></div>
     </div>
-    <div class="vp-note">Drag to rotate the view, scroll to zoom. Rod glow shows the current on each rod.</div>
+    <div class="vp-note">Drag to rotate, scroll to zoom</div>
   </section>
 
   <aside class="side">
     <div class="panel polar-panel">
-      <h2>Radiation pattern, seen from above</h2>
-      <p class="hint">Signal strength in every direction around the antenna. 0&deg; is where the directors point.</p>
+      <h2>Radiation pattern</h2>
+      <p class="hint">Top view. 0&deg; is the forward direction.</p>
       <div class="polar-wrap"><canvas id="polar" aria-label="Polar radiation pattern"></canvas></div>
       <div class="legend" id="legend">
         <span class="chip fixed"><span class="sw" style="border-color:var(--copper-hi)"></span>Live design</span>
@@ -175,10 +173,10 @@
     </div>
 
     <div class="readouts">
-      <div class="ro"><div class="k">Peak gain</div><div class="v" id="roGain">&ndash;</div><div class="x">Strength of the beam vs. an antenna that radiates equally everywhere</div></div>
-      <div class="ro"><div class="k">Front-to-back</div><div class="v" id="roFb">&ndash;</div><div class="x">How much stronger forward is than backward</div></div>
-      <div class="ro"><div class="k">Beamwidth</div><div class="v" id="roBw">&ndash;</div><div class="x">Width of the main beam at half power</div></div>
-      <div class="ro"><div class="k">Feed match (VSWR)</div><div class="v" id="roVswr">&ndash;</div><div class="x" id="roZ">Below 2 means the feed accepts the power</div></div>
+      <div class="ro"><div class="k">Peak gain</div><div class="v" id="roGain">&ndash;</div><div class="x">Relative to an isotropic antenna</div></div>
+      <div class="ro"><div class="k">Front-to-back</div><div class="v" id="roFb">&ndash;</div><div class="x">Forward vs. backward</div></div>
+      <div class="ro"><div class="k">Beamwidth</div><div class="v" id="roBw">&ndash;</div><div class="x">Half-power width</div></div>
+      <div class="ro"><div class="k">VSWR</div><div class="v" id="roVswr">&ndash;</div><div class="x" id="roZ">Good below 2</div></div>
     </div>
   </aside>
 </main>
@@ -187,31 +185,31 @@
   <div class="ctl">
     <label for="cFreq">Frequency <output id="oFreq"></output></label>
     <input type="range" id="cFreq" min="2.2" max="2.7" step="0.005">
-    <p>The signal fed in. Steady across the Wi-Fi band (2.40&ndash;2.48 GHz); far outside it the rods swap roles and the beam breaks up.</p>
+    <p>Wi-Fi band: 2.40&ndash;2.48 GHz</p>
   </div>
   <div class="ctl">
     <label for="cDir">Directors <output id="oDir"></output></label>
     <input type="range" id="cDir" min="0" max="6" step="1">
-    <p>Shorter rods in front. Each one narrows the beam and adds gain, with diminishing returns.</p>
+    <p>Rods in front of the driven rod</p>
   </div>
   <div class="ctl">
     <label for="cRefl">Reflector length <output id="oRefl"></output></label>
     <input type="range" id="cRefl" min="50" max="68" step="0.1">
-    <p>The rod behind. Longer than the driven rod (55.6 mm) it works as a mirror; shorter, the back lobe returns.</p>
+    <p>Driven rod is 55.6 mm</p>
   </div>
   <div class="ctl">
     <label for="cD1">Director length <output id="oD1"></output></label>
     <input type="range" id="cD1" min="44" max="60" step="0.1">
-    <p>Each later director is 1.8 mm shorter. Shorter than the driven rod they act as a lens; longer, they turn into mirrors.</p>
+    <p>Each later director is 1.8 mm shorter</p>
   </div>
   <div class="ctl">
     <label for="cSp">Spacing <output id="oSp"></output></label>
     <input type="range" id="cSp" min="60" max="160" step="1">
-    <p>Stretches or squeezes every gap between rods. Tighter gaps raise front-to-back but spoil the feed match.</p>
+    <p>Scales every gap between rods</p>
   </div>
   <div class="actions">
     <button class="btn primary" id="btnMeasure">Run virtual measurement</button>
-    <button class="btn" id="btnReset">Reset to our design</button>
+    <button class="btn" id="btnReset">Reset to default</button>
     <div class="toggles">
       <label><input type="checkbox" id="tBeam" checked> 3D beam</label>
       <label><input type="checkbox" id="tAnim"> Animate currents</label>
@@ -737,8 +735,8 @@ var STUDIO_DATA = {"defaults": {"freqGHz": 2.44, "reflectorMm": 59.0, "drivenMm"
     setRo("roBw", r.hpbwH === null ? "&ndash;" : r.hpbwH.toFixed(0) + "<small>&deg;</small>");
     var v = r.vswr, cls = v < 2 ? "good" : (v < 3 ? "warn" : "bad");
     setRo("roVswr", isFinite(v) ? v.toFixed(2) : "&infin;", cls);
-    $("roZ").textContent = "Input impedance " + r.Zin.re.toFixed(1) + (r.Zin.im >= 0 ? " + j" : " − j") +
-      Math.abs(r.Zin.im).toFixed(1) + " Ω. Below 2 means the feed accepts the power.";
+    $("roZ").textContent = "Z = " + r.Zin.re.toFixed(1) + (r.Zin.im >= 0 ? " + j" : " − j") +
+      Math.abs(r.Zin.im).toFixed(1) + " Ω, good below 2";
     var names = rodNames(), html = "", mx = 0;
     r.currents.forEach(function (c) { mx = Math.max(mx, c.mag); });
     r.currents.forEach(function (c, i) {
@@ -944,7 +942,7 @@ var STUDIO_DATA = {"defaults": {"freqGHz": 2.44, "reflectorMm": 59.0, "drivenMm"
     rods.forEach(function (r) { r.rel = r.mag / mx; });
     updateBeam(result.sol);
     var ms = performance.now() - t0;
-    $("solveInfo").innerHTML = "Solved " + design.lengths.length + " rods in <b>" + ms.toFixed(1) + " ms</b>";
+    $("solveInfo").innerHTML = "Solve time <b>" + ms.toFixed(1) + " ms</b>";
     updateReadouts(result); drawPolar();
   }
 
@@ -986,8 +984,8 @@ var STUDIO_DATA = {"defaults": {"freqGHz": 2.44, "reflectorMm": 59.0, "drivenMm"
     setControlsDisabled(false);
     $("btnMeasure").textContent = "Run virtual measurement";
     $("vpStatus").className = "vp-status";
-    $("runSummary").textContent = "Measured front-to-back " + fb.toFixed(0) + " dB, " + rms.toFixed(1) +
-      " dB RMS from the live model across 36 angles. Simulated measurement, not lab data.";
+    $("runSummary").textContent = "Simulated measurement: front-to-back " + fb.toFixed(0) + " dB, " +
+      rms.toFixed(1) + " dB RMS from the model.";
     drawPolar();
   }
   $("btnMeasure").addEventListener("click", function () {
@@ -1010,7 +1008,7 @@ var STUDIO_DATA = {"defaults": {"freqGHz": 2.44, "reflectorMm": 59.0, "drivenMm"
         var a = sweep.angles[sweep.shown];
         antenna.rotation.y = a * Math.PI / 180;   // turn the antenna; the source stays put
         sweep.shown++;
-        $("vpStatus").textContent = "Virtual turntable at " + a + "°, reading " + sweep.values[sweep.shown - 1] + " dBi";
+        $("vpStatus").textContent = "Turntable " + a + "°: " + sweep.values[sweep.shown - 1] + " dBi";
         drawPolar();
       } else { finishSweep(); }
     }

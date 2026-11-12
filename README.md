@@ -50,7 +50,7 @@ What every control does, and a full demo-video script:
 | [`Electromagnetic-Theory-Member-1-main/`](Electromagnetic-Theory-Member-1-main/) | **Project Lead + Member 1** | Analytical EM engine (`antenna_math_engine.py`) and interactive beamforming GUI (`antenna_gui.py`) |
 | [`EMT_Member2/`](EMT_Member2/) | **Member 2** | 4nec2 model (`yagi_4el_244GHz.nec`), simulation export (`simulate_yagi.py`), Smith chart, PDF report builder |
 | [`member3_hardware/`](member3_hardware/) | **Member 3** | Cutting-dimension & balun calculators, 3D assembly diagrams, protractor template, assembly guide |
-| [`member4_telemetry/`](member4_telemetry/) | **Member 4** | *(placeholder)* synthetic CSV generator, Friis link-budget, ESP32 RSSI firmware |
+| [`member4_telemetry/`](member4_telemetry/) | **Member 4** | Virtual measurement, Friis link budget, RSSI logger (phone or ESP32) |
 | [`data/`](data/) | Shared | **Every file passed between members** (dimensions JSON, pattern CSVs) |
 | [`emt_config.py`](emt_config.py) | Shared | Design constants (f0, λ, Z0) and the locations of the files in `data/` |
 | [`antenna_studio/`](antenna_studio/) | Shared (demo) | Live 3D Yagi designer: browser solver, verification test, build script |
