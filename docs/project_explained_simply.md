@@ -110,6 +110,40 @@ The **Array Factor** is a mathematical function that describes how the combined 
 
 The total pattern = (single element pattern) × (array factor). This is the **Pattern Multiplication Principle**.
 
+### 3.8 So How Does the Real Experiment Actually Work? (The Two-Phone Setup)
+
+A common confusion: the antenna does **not** connect the two phones together. Forget "connection" in the Wi-Fi/networking sense. The two phones have completely separate jobs:
+
+- **Phone 1 = the transmitter (the "source").** It sits ~1.5 m away and simply shares a 2.4 GHz hotspot — shouting a radio signal in all directions. It never moves. Think of it as a **lightbulb that stays on.**
+- **Phone 2 = the signal meter (the "receiver").** It sits right at your antenna, running a free Wi-Fi Analyzer app that shows how strong the arriving signal is (the "dBm" number). Think of it as a **light meter.**
+- **The antenna wraps around Phone 2** and acts like a **lens/funnel** for the radio waves *before* they reach Phone 2.
+
+The experiment is then:
+
+> Phone 1 shines constant "radio light." You slowly **spin the antenna through a full circle (10° at a time, 36 steps)**, and at each angle Phone 2 tells you how much signal is getting through. Pointed **at** Phone 1 → strong reading. Pointed **away** → weak reading. Plot all 36 numbers on a circle and you get the **radiation pattern** — the proof that the antenna is directional.
+
+Radio waves are the *same kind of thing as light* — just a much longer, invisible wavelength. So "an antenna that focuses radio" is doing to Wi-Fi exactly what a lens or a torch reflector does to light. That's not a metaphor; it's the same physics.
+
+### 3.9 "Wait — It's Just Copper Wires on a Stick?!" Why That Works
+
+Yes — and here's the honest intuition for *why* four bits of wire can steer a beam.
+
+**A metal rod of the right length "rings" at a radio frequency**, the way a tuning fork of the right length rings at a musical note. When a 2.4 GHz wave washes over a copper rod cut to about half the wavelength, it pushes the free electrons in the copper back and forth. The rod starts "sloshing" electrons in step with the wave and **re-radiates** it — like one tuning fork setting off another nearby.
+
+The Yagi trick is to arrange four rods so their re-radiations **add up in one direction and cancel in the others:**
+
+- **Reflector** (longest, at the back): re-radiates slightly *out of step*, so waves cancel behind it → it acts like a mirror and pushes energy forward.
+- **Directors** (shorter, in front): re-radiate slightly *ahead of step*, pulling the wave forward like a line of people passing a bucket along.
+- **Driven element** (the middle one): the only rod where energy actually enters or leaves.
+
+The reflector and directors aren't wired to anything — they just sit nearby and "ring along," shaping the beam purely through their **length and spacing**. That's what *parasitic coupling* (Section 3.3) means in plain words.
+
+So the design really is: **cut 4 copper rods to precise lengths, space them at precise distances on a non-metal stick — done.** The magic isn't complexity, it's **precision** (millimetres) — and all of that precision was already worked out in software by the dimension calculator. The stick must be non-metal only because a metal stick would "ring" too and wreck the pattern.
+
+**And soldering?** On the simple **phone path you don't solder at all.** You just lay the measuring phone right at the small gap in the middle (driven) rod. The phone's own internal Wi-Fi antenna sits inside the copper rods' focused field and picks it up — the rods **couple through the air** to the phone, with no electrical connection. (The fancier version solders a coaxial cable to the driven rod for a cleaner feed, but it isn't needed for the demo.)
+
+> **One-sentence summary:** Phone 1 is a radio lightbulb, the copper rods are a lens that focuses that light, and Phone 2 is the light meter — spinning the lens while watching the meter draws the beam shape that proves the antenna is directional.
+
 ---
 
 ## 4. Why a "Hybrid" Project?
