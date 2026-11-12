@@ -243,7 +243,7 @@ class AntennaDashboard:
 
         self.ax_overlay.set_theta_zero_location('N')
         self.ax_overlay.set_theta_direction(-1)
-        self.ax_overlay.set_title("Validation: Theory vs Sim vs Empirical", fontsize=10, pad=12)
+        self.ax_overlay.set_title("Validation: Theory vs Sim vs Virtual Meas.", fontsize=10, pad=12)
 
         # ------------------------------------------------------------------
         # Sliders (right panel, x = 0.80 to 0.96)
@@ -625,7 +625,7 @@ class AntennaDashboard:
 
         plots_count += overlay_csv(theory_file, 'blue', '-', 'Theory')
         plots_count += overlay_csv(sim_file, 'red', '--', 'Simulation')
-        plots_count += overlay_csv(emp_file, 'darkgreen', ':', 'Empirical')
+        plots_count += overlay_csv(emp_file, 'darkgreen', ':', 'Virtual Meas.')
 
         if plots_count == 0:
             self.ax_overlay.set_title(
