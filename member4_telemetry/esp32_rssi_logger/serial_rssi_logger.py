@@ -165,6 +165,29 @@ def write_empirical_csv(gains_dbi, path=EMPIRICAL_CSV):
     return path
 
 
+def write_provenance(mode):
+    """
+    Stamp data/empirical_pattern.provenance.txt so every later step knows what
+    the CSV really is. A PHYSICAL stamp also stops virtual_measurement.py (and
+    therefore run_pipeline.py) from overwriting real data, and makes the
+    Antenna Studio label the curve "Measured" instead of "Virtual measurement".
+    """
+    import datetime
+    kind = {
+        "dummy": "DUMMY DATA (dry run with no hardware, not a measurement)",
+        "manual": "PHYSICAL MEASUREMENT (phone Wi-Fi analyser, typed in per angle)",
+        "serial": "PHYSICAL MEASUREMENT (ESP32 RSSI logger over USB)",
+    }[mode]
+    path = os.path.join(os.path.dirname(EMPIRICAL_CSV), "empirical_pattern.provenance.txt")
+    with open(path, "w", encoding="ascii") as f:
+        f.write("empirical_pattern.csv - PROVENANCE\n")
+        f.write("=" * 52 + "\n")
+        f.write("TYPE : {}\n".format(kind))
+        f.write("Generator  : member4_telemetry/esp32_rssi_logger/serial_rssi_logger.py\n")
+        f.write("Generated  : {}\n".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    return path
+
+
 # ----------------------------------------------------------------------------
 # Main
 # ----------------------------------------------------------------------------
@@ -200,13 +223,13 @@ def main(argv=None):
         len(ANGLES), PATTERN_STEP_DEG))
 
     if opts["dummy"]:
-        dbm = read_dummy_sweep()
+        dbm, mode = read_dummy_sweep(), "dummy"
     elif opts["manual"]:
-        dbm = read_manual_sweep()
+        dbm, mode = read_manual_sweep(), "manual"
     elif opts["port"]:
-        dbm = read_serial_sweep(opts["port"], opts["baud"], opts["dwell"])
+        dbm, mode = read_serial_sweep(opts["port"], opts["baud"], opts["dwell"]), "serial"
         if dbm is None:
-            dbm = read_manual_sweep()
+            dbm, mode = read_manual_sweep(), "manual"
     else:
         print("  No mode chosen. Use --port COMx, --manual, or --dummy.")
         print("  Example: python serial_rssi_logger.py --port COM5\n")
@@ -214,14 +237,19 @@ def main(argv=None):
 
     gains = dbm_to_normalized_dbi(dbm)
     path = write_empirical_csv(gains)
+    write_provenance(mode)
 
     peak_i = max(range(len(gains)), key=lambda k: gains[k])
     back_i = ANGLES.index(180) if 180 in ANGLES else 0
     print("\n  Wrote : {}".format(path))
     print("  Peak  : {:.2f} dBi at {} deg".format(gains[peak_i], ANGLES[peak_i]))
     print("  F/B   : {:.1f} dB (0 deg vs 180 deg)".format(gains[0] - gains[back_i]))
-    print("\n  This replaces the synthetic CSV. Member 1's overlay and")
-    print("  friis_link_budget.py error analysis now use real data.")
+    if mode == "dummy":
+        print("\n  Dry-run data written (stamped DUMMY, not a measurement).")
+    else:
+        print("\n  Real data written and stamped PHYSICAL. run_pipeline.py will not")
+        print("  overwrite it, and the Antenna Studio will label it 'Measured'.")
+        print("  Refresh the Studio with:  python antenna_studio/build_studio.py")
     print("=" * 70)
 
 

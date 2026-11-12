@@ -169,7 +169,7 @@
         <span class="chip fixed"><span class="sw" style="border-color:var(--copper-hi)"></span>Live design</span>
         <button class="chip" data-ref="theory" aria-pressed="true"><span class="sw" style="border-color:var(--theory)"></span>Theory</button>
         <button class="chip" data-ref="sim" aria-pressed="true"><span class="sw" style="border-color:var(--sim);border-top-style:dashed"></span>Simulation</button>
-        <button class="chip" data-ref="meas" aria-pressed="true"><span class="sw" style="border-color:var(--meas);border-top-style:dotted"></span>Virtual measurement</button>
+        <button class="chip" data-ref="meas" aria-pressed="true"><span class="sw" style="border-color:var(--meas);border-top-style:dotted"></span><span id="measLabel">Virtual measurement</span></button>
       </div>
       <p class="run-summary" id="runSummary" aria-live="polite"></p>
     </div>
@@ -229,6 +229,8 @@ var STUDIO_DATA = /*__DATA__*/null;
   "use strict";
   var E = window.YagiEngine, D = STUDIO_DATA;
   var DEF = D.defaults;
+  // honest name for the green reference curve (virtual vs real measurement)
+  document.getElementById("measLabel").textContent = D.measLabel || "Virtual measurement";
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // ------------------------------------------------------------------ state

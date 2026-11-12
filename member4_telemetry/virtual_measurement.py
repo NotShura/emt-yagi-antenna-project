@@ -38,6 +38,10 @@ Usage
     python member4_telemetry/virtual_measurement.py              # default seed
     python member4_telemetry/virtual_measurement.py --seed 7     # reproducible
     python member4_telemetry/virtual_measurement.py --sigma 0.6  # noise std (dB)
+    python member4_telemetry/virtual_measurement.py --force      # replace a REAL sweep
+
+If data/empirical_pattern.csv already holds a physical measurement (stamped by
+serial_rssi_logger.py), this script leaves it alone unless --force is given.
 """
 
 import os
@@ -276,9 +280,33 @@ def parse_args(argv):
     return seed, sigma
 
 
+def existing_measurement_type():
+    """Return the TYPE line of the current provenance stamp, or None."""
+    path = os.path.join(DATA_DIR, "empirical_pattern.provenance.txt")
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="ascii", errors="replace") as f:
+        for line in f:
+            if line.startswith("TYPE"):
+                return line.split(":", 1)[1].strip()
+    return None
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     seed, sigma = parse_args(argv)
+
+    # Never overwrite a real field sweep (serial_rssi_logger.py stamps it
+    # PHYSICAL). This keeps run_pipeline.py safe to re-run after a measurement.
+    existing = existing_measurement_type()
+    if existing and existing.startswith("PHYSICAL") and "--force" not in argv:
+        print("=" * 70)
+        print("  MEMBER 4 - VIRTUAL MEASUREMENT: skipped")
+        print("  data/empirical_pattern.csv holds a real measurement:")
+        print("    {}".format(existing))
+        print("  Keeping it. Use --force to replace it with a virtual sweep.")
+        print("=" * 70)
+        return
 
     print("=" * 70)
     print("  MEMBER 4 - VIRTUAL MEASUREMENT (software-only fallback)")

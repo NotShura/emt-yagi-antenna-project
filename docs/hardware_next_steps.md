@@ -270,7 +270,13 @@ app on the measuring phone and type it in.
 
 When it finishes, it saves your real measurements to `data/empirical_pattern.csv`.
 That one file is the bridge back to the software — **it automatically replaces the
-placeholder data everyone's been testing with.**
+virtual (simulated) measurement everyone's been using.** It also stamps the file
+as a *physical* measurement, so:
+
+- re-running `run_pipeline.py` later **won't overwrite your real data** (the
+  virtual-measurement step sees the stamp and skips itself), and
+- the Antenna Studio will label your curve **"Measured (phone sweep)"** instead of
+  "Virtual measurement".
 
 ---
 
@@ -282,14 +288,17 @@ Two commands turn your 36 numbers into the money shot:
 # 1) Compare your real pattern against the theory (prints error numbers + a plot)
 python member4_telemetry/friis_link_budget.py
 
-# 2) Open the interactive dashboard and overlay Theory vs Simulation vs YOUR data
-python Electromagnetic-Theory-Member-1-main/antenna_gui.py
+# 2) Rebuild and open the Antenna Studio with YOUR data on it
+python antenna_studio/build_studio.py
 ```
 
-In the dashboard, hit **"Plot Overlay"** and you'll see three curves on one polar
-graph. If your red (empirical) curve has its **big lobe near 0°** and a **dent
-near 180°**, congratulations — you built a working directional antenna and it
-agrees with the physics. 🎉
+The **Antenna Studio** opens in your browser. On its polar plot ("Radiation
+pattern, seen from above") your data appears as **green dots labelled "Measured
+(phone sweep)"**, on top of the copper live curve, the cyan theory and the pink
+simulation. If your green dots make a **big lobe near 0°** and a **dent near
+180°**, congratulations — you built a working directional antenna and it agrees
+with the physics. 🎉 (What every part of the Studio means: `video_demo_guide.md`,
+Section 2.)
 
 `friis_link_budget.py` also prints how close you got: a **front-to-back ratio**
 (how much stronger the front is than the back) and an **RMSE** (average
@@ -303,9 +312,10 @@ disagreement with theory, in dB — small is good).
 
 ## Part D — Film it and finish the slides 🎬
 
-- **Video (≤ 5 min, < 75 MB):** a split-screen works great — one side shows you
-  rotating the antenna, the other shows the live/overlay plot. Narrate what the
-  beam is doing.
+- **Video (≤ 5 min, < 75 MB):** follow [`video_demo_guide.md`](video_demo_guide.md).
+  With real hardware, add a 15–20 s clip of you turning the copper antenna on the
+  protractor, then show your green "Measured" dots in the Studio. Say "we measured
+  it for real" instead of "simulated measurement".
 - **Slides 13–15 (your section):** Experimental Setup (the 1.5 m range photo),
   Observations (your overlay graph + the front-to-back number), and Conclusion
   (did real life match the math? by how much?).
@@ -321,7 +331,7 @@ disagreement with theory, in dB — small is good).
 - [ ] Driven element split into two 27.8 mm arms with a small gap
 - [ ] Source placed ~1.5 m away, antenna on the protractor, 0° = toward directors
 - [ ] Logged 36 readings → `data/empirical_pattern.csv` written
-- [ ] Ran `friis_link_budget.py` and opened the GUI overlay
+- [ ] Ran `friis_link_budget.py` and rebuilt the Studio (`antenna_studio/build_studio.py`)
 - [ ] Recorded the video + did slides 13–15
 
 ## One-page command cheat sheet
@@ -338,7 +348,10 @@ python member4_telemetry/esp32_rssi_logger/serial_rssi_logger.py --manual
 
 # See the result:
 python member4_telemetry/friis_link_budget.py        # real vs theory, numbers + plot
-python Electromagnetic-Theory-Member-1-main/antenna_gui.py   # interactive overlay
+python antenna_studio/build_studio.py                # Studio with your "Measured" curve
+
+# Safe to re-run everything later - your real data is kept:
+python run_pipeline.py --studio
 ```
 
 ---

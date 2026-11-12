@@ -71,6 +71,28 @@ def defaults_from_dimensions():
     }
 
 
+def measurement_label():
+    """
+    Name the green reference curve after what data/empirical_pattern.csv really
+    is, using the provenance stamp written by virtual_measurement.py or
+    serial_rssi_logger.py. Real data must never be called simulated, and
+    simulated data must never be called measured.
+    """
+    stamp = os.path.join(os.path.dirname(EMPIRICAL_CSV), "empirical_pattern.provenance.txt")
+    kind = ""
+    if os.path.exists(stamp):
+        with open(stamp, "r", encoding="ascii", errors="replace") as f:
+            for line in f:
+                if line.startswith("TYPE"):
+                    kind = line.split(":", 1)[1].strip()
+                    break
+    if kind.startswith("PHYSICAL"):
+        return "Measured (ESP32 sweep)" if "ESP32" in kind else "Measured (phone sweep)"
+    if kind.startswith("DUMMY"):
+        return "Dry-run data (not measured)"
+    return "Virtual measurement"
+
+
 def safe_script(js):
     # never let a library close our <script> tag early
     return js.replace("</script", "<\\/script")
@@ -79,6 +101,7 @@ def safe_script(js):
 def build():
     data = {
         "defaults": defaults_from_dimensions(),
+        "measLabel": measurement_label(),
         "refs": {
             "theory": read_pattern(THEORETICAL_CSV),
             "sim": read_pattern(SIMULATED_CSV),
@@ -94,7 +117,8 @@ def build():
         html = html.replace(marker, content, 1)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html)
-    print("  Built {} ({:.1f} MB)".format(os.path.relpath(OUT, ROOT), os.path.getsize(OUT) / 1e6))
+    print("  Built {} ({:.1f} MB), green curve labelled '{}'".format(
+        os.path.relpath(OUT, ROOT), os.path.getsize(OUT) / 1e6, data["measLabel"]))
     return OUT
 
 

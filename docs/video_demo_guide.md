@@ -133,6 +133,11 @@ This is the 3D beam **seen from directly above**, flattened onto a circle.
 
 Click a chip to hide or show that curve.
 
+> If a real phone sweep has been done (see `hardware_next_steps.md`), the green
+> chip reads **"Measured (phone sweep)"** instead. The app names it from the
+> data's provenance stamp, so the label is always honest. Adjust your narration
+> accordingly ("we measured it for real").
+
 > 🔑 **Key idea to say out loud:** the cyan, pink and green references are our
 > validated design and **never move**. The copper line is the live design. At our
 > design they all lie on top of each other, which is the validation. When you move a

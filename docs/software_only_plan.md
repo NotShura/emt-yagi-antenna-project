@@ -38,14 +38,17 @@ mechanical drawing. It already exists:
 
 - `EMT_Member2/yagi_4el_244GHz.nec` — the NEC geometry (4 wires, lengths,
   spacings, feed, copper loading). **This is the antenna CAD model.**
+- **The Antenna Studio** (`antenna_studio/antenna_studio.html`) — the same
+  geometry as a live, rotatable 3D model whose physics is re-solved as you change
+  it. This is what the demo video shows.
 - `EMT_Member2/yagi_3d_structure.png` and `member3_hardware/visualize_antenna.py`
-  — 3D renders for the slides.
+  — static 3D renders for the slides.
 
 ## 4. How to run it
 
 ```bash
-python run_pipeline.py          # regenerates all three CSVs + plots
-python run_pipeline.py --gui    # ...then opens the overlay dashboard
+python run_pipeline.py            # regenerates all three CSVs + plots + the Studio
+python run_pipeline.py --studio   # ...then opens the Antenna Studio
 ```
 
 Just the measurement leg:
@@ -60,20 +63,30 @@ Outputs:
 - `data/empirical_pattern.provenance.txt` — a stamp recording it is simulated
 - `member4_telemetry/output/virtual_measurement_preview.png` — polar preview
 
+The Studio also has its own **"Run virtual measurement"** button that performs
+the same kind of sweep live on screen (the antenna turns on a turntable and the
+points appear one by one). That's the version to show in the video.
+
+> If someone later does a real phone sweep, `serial_rssi_logger.py` stamps the
+> CSV as a *physical* measurement. After that this script will not overwrite it
+> (use `--force` if you really want to), and the Studio labels the curve
+> "Measured" instead of "Virtual measurement".
+
 ## 5. Slide/video mapping (what replaces the hardware deliverables)
 
 | Rubric item (was hardware) | Software replacement |
 |---|---|
-| Components | 3D CAD render + dimension/BOM table (virtual components) |
-| Assembly | Annotated 3D geometry showing lengths & spacings |
-| Prototype demo | Full-wave simulation: pattern, VSWR/S₁₁, Smith chart |
-| Experimental data | Virtual turntable sweep → the "measurement" curve |
-| Demo video | Screen recording of the GUI overlay + simulation walkthrough |
+| Components | Studio 3D view + dimension/BOM table (virtual components) |
+| Assembly | Studio 3D view (rotate it) + annotated 3D geometry with lengths & spacings |
+| Prototype demo | The Studio itself: live 3D antenna, beam, gain/F-B/VSWR, plus the Smith chart |
+| Experimental data | Live virtual turntable sweep in the Studio → the "measurement" curve |
+| Demo video | Screen recording of the Studio, scripted in `video_demo_guide.md` |
 
 ## 6. The honesty rules (important — this is graded)
 
-1. **Label it as simulated.** The curve is "Virtual Measurement," never
-   "measured in lab." The GUI legend and the provenance file already say so.
+1. **Label it as simulated.** The curve is "Virtual measurement," never
+   "measured in lab." The Studio's legend, its measurement summary ("Simulated
+   measurement, not lab data") and the provenance file already say so.
 2. **State the reason plainly** in the report: *"physical build omitted due to
    component/time constraints; the design is validated across two independent
    solvers and a simulated measurement."* Evaluators respect an honest, reasoned

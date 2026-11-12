@@ -104,10 +104,14 @@ A Python program that computes, from pure equations, how the antenna *should*
 radiate. This is the **"ground truth from theory."** No shortcuts, no downloaded
 tools — we wrote the electromagnetics ourselves.
 
-### 4.2 The interactive dashboard (Member 1)
-A visual app with sliders. Drag a slider and the radiation pattern updates live —
-change spacing, number of elements, phase, etc. It also draws the big **overlay
-plot** that compares everyone's results on one graph. This is the "wow" of the demo.
+### 4.2 The interactive apps (Member 1 + the Antenna Studio)
+Member 1 built a matplotlib dashboard for exploring antenna *arrays* with sliders.
+For the demo we built the **Antenna Studio**: a browser app focused on *our* Yagi.
+It shows the antenna in 3D (you can spin it), each rod glowing with its current,
+and the beam around it. It re-solves the physics live as you move five sliders, in
+about 10–20 milliseconds. Its polar plot overlays everyone's results on one graph.
+This is the "wow" of the demo. (Its solver is a port of the Lead's engine, checked
+to match it exactly.)
 
 ### 4.3 The professional simulation (Member 2)
 We describe the exact antenna geometry in a standard simulation format (a `.nec`
@@ -133,8 +137,8 @@ speaks it, all the parts snap together.
 
 ```
    Theory engine ─┐
-   Simulation ────┼──►  one shared format  ──►  Overlay plot
-   Measurement ───┘     (angle, strength)        (all 3 on one graph)
+   Simulation ────┼──►  one shared format  ──►  Antenna Studio polar plot
+   Measurement ───┘     (angle, strength)        (all 3 + the live design)
 ```
 
 ---
@@ -196,9 +200,13 @@ version end-to-end** so the project is complete and demo-ready right now:
 2. Built a new **"virtual measurement"** program — a software turntable sweep of
    the simulated antenna (`member4_telemetry/virtual_measurement.py`).
 3. Wired it into the one-command pipeline (`run_pipeline.py`).
-4. Relabeled the dashboard's third curve to **"Virtual Meas."** so nothing looks
-   like fake lab data, and added a provenance stamp.
-5. Ran the whole thing and checked all three curves agree.
+4. Labelled it honestly everywhere as a *simulated* measurement, with a
+   provenance stamp. A later real phone sweep gets stamped *physical*, is never
+   overwritten by the pipeline, and is labelled "Measured".
+5. Built the **Antenna Studio** (`antenna_studio/`): the live 3D antenna you can
+   redesign, with a live virtual turntable measurement. Its solver was checked
+   against our Python engine on six designs and matches to 0.0000 dB.
+6. Ran the whole thing and checked all three curves agree.
 
 ### The result (the payoff)
 
