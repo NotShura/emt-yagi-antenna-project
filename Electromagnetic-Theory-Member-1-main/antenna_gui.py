@@ -225,10 +225,10 @@ class AntennaDashboard:
         # Build figure
         self.fig = plt.figure(figsize=(15, 8.5))
         self.fig.canvas.manager.set_window_title(
-            "2.4 GHz Phased Array Dashboard - Member 1 GUI")
+            "2.4 GHz Phased Array Antenna Dashboard")
 
         self.fig.suptitle(
-            "2.4 GHz Phased Array Antenna Dashboard  |  Member 1: Interactive GUI & Pattern Overlay",
+            "2.4 GHz Phased Array Antenna Dashboard  |  Interactive Beamforming & Pattern Overlay",
             fontsize=13, fontweight='bold', y=0.98
         )
 
@@ -341,6 +341,20 @@ class AntennaDashboard:
         self.btn_recalc.on_clicked(self.on_update_theory_csv)
         self.radio_taper.on_clicked(self.on_taper_change)
 
+        # ------------------------------------------------------------------
+        # Debounced heavy-redraw timer. While a slider is dragged we redraw
+        # only the fast 2D pattern; the expensive metrics + 3D surface are
+        # deferred until motion settles (~150 ms), so dragging stays smooth
+        # and real-time instead of recomputing 50k+ point metrics and a full
+        # 3D surface on every single slider tick.
+        # ------------------------------------------------------------------
+        try:
+            self._heavy_timer = self.fig.canvas.new_timer(interval=150)
+            self._heavy_timer.single_shot = True
+            self._heavy_timer.add_callback(self._run_heavy)
+        except Exception:
+            self._heavy_timer = None
+
         # Initial draw
         self.update_main_plot()
         self.on_plot_overlay(None)
@@ -353,7 +367,8 @@ class AntennaDashboard:
         self.d_ratio = float(self.slider_d.val)
         self.beta_deg = float(self.slider_beta.val)
         self.beta_y_deg = float(self.slider_beta_y.val)
-        self.update_main_plot()
+        # heavy=False: redraw the 2D pattern now, defer metrics + 3D (debounced).
+        self.update_main_plot(heavy=False)
 
     def on_mode_change(self, label):
         if label.startswith('Planar') and planar_pattern is None:
@@ -396,9 +411,18 @@ class AntennaDashboard:
     # --------------------------------------------------------------------------
     # Main Plot Update
     # --------------------------------------------------------------------------
-    def update_main_plot(self):
+    def update_main_plot(self, heavy=True):
+        """
+        Redraw the dashboard for the current parameters.
+
+        heavy=True  : full update (2D pattern + metrics + 3D surface). Used for
+                      one-off changes (buttons, radios, initial draw).
+        heavy=False : fast path for slider dragging - redraw only the cheap 2D
+                      pattern now and DEFER the expensive metrics + 3D surface
+                      via the debounce timer, so dragging stays real-time.
+        """
         if self.mode == 'planar':
-            self.update_planar_plot()
+            self.update_planar_plot(heavy=heavy)
             return
         self.ax_main.cla()
         self.ax_main.set_theta_zero_location('N')
@@ -407,7 +431,9 @@ class AntennaDashboard:
         d_m = self.d_ratio * LAMBDA
         beta_rad = np.radians(self.beta_deg)
 
-        theta = np.linspace(0.0, 2.0 * np.pi, 3600)
+        # 900 points is visually smooth on a polar plot but ~4x cheaper to
+        # recompute/redraw than the old 3600, keeping slider drags snappy.
+        theta = np.linspace(0.0, 2.0 * np.pi, 900)
         theta_eval = np.where(theta <= np.pi, theta, 2.0 * np.pi - theta)
 
         pat = total_pattern(theta_eval, N=self.N, d=d_m, beta=beta_rad, taper=self.taper)
@@ -431,13 +457,45 @@ class AntennaDashboard:
                               linestyle='--', linewidth=1.5)
             self.ax_main.scatter([rad], [1.0], color='crimson', s=35, zorder=5)
 
-        # Metrics
+        self.ax_main.set_title(
+            "Interactive Pattern\nN={}, d={:.2f}*lambda, beta={:.0f} deg".format(
+                self.N, self.d_ratio, self.beta_deg),
+            fontsize=10, pad=12
+        )
+        self.ax_main.set_rlabel_position(45)
+        self.ax_main.legend(loc='lower right', fontsize=8)
+
+        if heavy:
+            # One-off change: compute metrics and the 3D surface immediately,
+            # then do a normal full redraw of the whole figure.
+            self._update_linear_metrics(d_m, beta_rad)
+            self.update_3d_plot(d_m, beta_rad)
+            self.fig.canvas.draw_idle()
+        else:
+            # Slider drag: defer the expensive metrics + 3D until motion settles,
+            # and blit ONLY the 2D axis (~6 ms) instead of a full figure redraw
+            # (~200 ms) so the pattern tracks the slider in real time.
+            self._schedule_heavy()
+            self._blit_main()
+
+    # --------------------------------------------------------------------------
+    # Metrics + debounce helpers
+    # --------------------------------------------------------------------------
+    def _blit_main(self):
+        """Fast partial redraw of just the main 2D axis (for slider dragging)."""
+        try:
+            self.ax_main.redraw_in_frame()
+            self.fig.canvas.blit(self.ax_main.bbox)
+        except Exception:
+            # Backend without blit support, or first draw not done yet.
+            self.fig.canvas.draw_idle()
+    def _update_linear_metrics(self, d_m, beta_rad):
+        """Compute and show the linear-array metrics (the expensive part)."""
         D0_dBi, _ = compute_directivity(N=self.N, d=d_m, beta=beta_rad, taper=self.taper)
         hpbw, th_max = compute_hpbw(N=self.N, d=d_m, beta=beta_rad, taper=self.taper)
         hpbw_str = "{:.1f} deg".format(hpbw) if hpbw is not None else "N/A"
         null_str = (", ".join(["{:.0f} deg".format(n) for n in self.null_list])
                     if self.null_list else "None")
-
         self.info_text.set_text(
             "Array Metrics:\n"
             "Frequency: {:.2f} GHz\n"
@@ -447,35 +505,55 @@ class AntennaDashboard:
             "Nulls:     {}".format(F0 / 1e9, D0_dBi, hpbw_str, th_max, null_str)
         )
 
-        self.ax_main.set_title(
-            "Interactive Pattern\nN={}, d={:.2f}*lambda, beta={:.0f} deg".format(
-                self.N, self.d_ratio, self.beta_deg),
-            fontsize=10, pad=12
-        )
-        self.ax_main.set_rlabel_position(45)
-        self.ax_main.legend(loc='lower right', fontsize=8)
+    def _planar_kw(self):
+        """Current planar-array keyword args for the engine."""
+        d_m = self.d_ratio * LAMBDA
+        return dict(Nx=self.N, Ny=self.N, dx=d_m, dy=d_m,
+                    beta_x=np.radians(self.beta_deg),
+                    beta_y=np.radians(self.beta_y_deg), taper=self.taper)
 
-        # Refresh the live 3D spherical pattern with the same parameters
-        self.update_3d_plot(d_m, beta_rad)
+    def _schedule_heavy(self):
+        """(Re)start the debounce timer; fall back to an immediate update."""
+        if self._heavy_timer is None:
+            self._run_heavy()
+            return
+        try:
+            self._heavy_timer.stop()
+            self._heavy_timer.start()
+        except Exception:
+            self._run_heavy()
 
+    def _run_heavy(self):
+        """Deferred expensive redraw (metrics + 3D) for the current mode."""
+        if self._heavy_timer is not None:
+            try:
+                self._heavy_timer.stop()
+            except Exception:
+                pass
+        if self.mode == 'planar' and planar_pattern is not None:
+            self.update_planar_3d(self._planar_kw())
+        else:
+            d_m = self.d_ratio * LAMBDA
+            beta_rad = np.radians(self.beta_deg)
+            self._update_linear_metrics(d_m, beta_rad)
+            self.update_3d_plot(d_m, beta_rad)
         self.fig.canvas.draw_idle()
 
     # --------------------------------------------------------------------------
     # Planar N x N Array (dipoles along x, grid in the x-y plane, broadside = +z)
     # --------------------------------------------------------------------------
-    def update_planar_plot(self):
+    def update_planar_plot(self, heavy=True):
         self.ax_main.cla()
         self.ax_main.set_theta_zero_location('N')
         self.ax_main.set_theta_direction(-1)
 
-        d_m = self.d_ratio * LAMBDA
-        kw = dict(Nx=self.N, Ny=self.N, dx=d_m, dy=d_m,
-                  beta_x=np.radians(self.beta_deg), beta_y=np.radians(self.beta_y_deg),
-                  taper=self.taper)
-        D0_dBi, _, th_pk, ph_pk = planar_directivity(n_theta=181, n_phi=361, **kw)
+        kw = self._planar_kw()
+        # Coarser integration grid (was 181x361) keeps peak-finding responsive
+        # while dragging; still plenty accurate for locating the main beam.
+        D0_dBi, _, th_pk, ph_pk = planar_directivity(n_theta=91, n_phi=181, **kw)
 
         # Elevation cut through the main beam (0 deg = broadside +z)
-        alpha = np.linspace(0.0, 2.0 * np.pi, 1441)
+        alpha = np.linspace(0.0, 2.0 * np.pi, 721)
         ph_c = np.radians(ph_pk)
         th_c = np.arccos(np.clip(np.cos(alpha), -1.0, 1.0))
         ph_cut = np.arctan2(np.sin(alpha) * np.sin(ph_c), np.sin(alpha) * np.cos(ph_c))
@@ -501,13 +579,20 @@ class AntennaDashboard:
             "Beam:      th={:.0f}, ph={:.0f}\n"
             "Nulls:     linear only".format(F0 / 1e9, D0_dBi, hpbw_str, th_pk, ph_pk))
 
-        self.update_planar_3d(kw)
-        self.fig.canvas.draw_idle()
+        if heavy:
+            self.update_planar_3d(kw)
+            self.fig.canvas.draw_idle()
+        else:
+            # Slider drag: defer the expensive 3D surface, blit only the 2D cut.
+            self._schedule_heavy()
+            self._blit_main()
 
     def update_planar_3d(self, kw):
         self.ax_3d.cla()
-        theta_vals = np.linspace(0.0, np.pi, 73)
-        phi_vals = np.linspace(0.0, 2.0 * np.pi, 73)
+        # Coarser mesh (was 73) + antialiasing off: a 3D plot_surface is the
+        # single most expensive thing here, so keep it light for live updates.
+        theta_vals = np.linspace(0.0, np.pi, 37)
+        phi_vals = np.linspace(0.0, 2.0 * np.pi, 37)
         THETA, PHI = np.meshgrid(theta_vals, phi_vals)
         R = planar_pattern(THETA, PHI, **kw)
         R = R / max(np.max(R), 1e-12)
@@ -516,7 +601,7 @@ class AntennaDashboard:
         Y = R * np.sin(THETA) * np.sin(PHI)
         Z = R * np.cos(THETA)
         self.ax_3d.plot_surface(X, Y, Z, facecolors=plt.cm.jet(R ** 2), linewidth=0,
-                                antialiased=True, alpha=0.9, rstride=1, cstride=1)
+                                antialiased=False, alpha=0.9, rstride=1, cstride=1)
         self.ax_3d.set_title("Live 3D Planar Pattern\nTaper: {}".format(self.taper),
                              fontsize=10, pad=8)
         self.ax_3d.set_xlabel('X (dipole axis)', fontsize=8)
@@ -548,9 +633,10 @@ class AntennaDashboard:
         """
         self.ax_3d.cla()
 
-        # Coarse mesh for live responsiveness
-        theta_vals = np.linspace(0.0, np.pi, 73)        # elevation
-        phi_vals = np.linspace(0.0, 2.0 * np.pi, 73)    # azimuth
+        # Coarse mesh for live responsiveness (was 73; a 3D plot_surface is the
+        # heaviest render in this GUI, so keep the facet count modest).
+        theta_vals = np.linspace(0.0, np.pi, 37)        # elevation
+        phi_vals = np.linspace(0.0, 2.0 * np.pi, 37)    # azimuth
         THETA, PHI = np.meshgrid(theta_vals, phi_vals)
 
         # Evaluate the engine's genuine 3D array pattern over the (theta, phi) mesh
@@ -576,7 +662,7 @@ class AntennaDashboard:
         facecolors = plt.cm.jet(intensity / (np.max(intensity) + 1e-12))
 
         self.ax_3d.plot_surface(X, Y, Z, facecolors=facecolors, linewidth=0,
-                                antialiased=True, alpha=0.9, rstride=1, cstride=1)
+                                antialiased=False, alpha=0.9, rstride=1, cstride=1)
 
         self.ax_3d.set_title(
             "Live 3D Spherical Pattern\nTaper: {}".format(self.taper),
@@ -645,7 +731,7 @@ class AntennaDashboard:
 # ------------------------------------------------------------------------------
 if __name__ == "__main__":
     print("=" * 60)
-    print("  2.4 GHz Antenna Array Dashboard  (Member 1 - GUI)")
+    print("  2.4 GHz Antenna Array Dashboard")
     print("  Matplotlib Interactive Widgets Interface")
     print("  Close the window to exit.")
     print("=" * 60)
